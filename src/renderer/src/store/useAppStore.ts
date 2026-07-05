@@ -26,6 +26,7 @@ interface AppState {
   setSearchQuery: (query: string) => void
   setQuickFilter: (filter: QuickFilter) => void
   setSelectedTaskId: (taskId: string | null) => void
+  trackRecentTask: (taskId: string) => Promise<void>
   setBulkSelectedTaskIds: (taskIds: string[]) => void
   toggleBulkSelectedTaskId: (taskId: string) => void
   clearBulkSelection: () => void
@@ -54,7 +55,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   setProjectViewMode: (mode) => set({ projectViewMode: mode }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setQuickFilter: (filter) => set({ quickFilter: filter }),
-  setSelectedTaskId: (taskId) => set({ selectedTaskId: taskId }),
+  setSelectedTaskId: (taskId) => {
+    set({ selectedTaskId: taskId })
+    if (taskId) void get().trackRecentTask(taskId)
+  },
+  trackRecentTask: async (taskId) => {
+    const { data, persist } = get()
+    const current = data.settings.recentTaskIds
+    const recentTaskIds = [taskId, ...current.filter((id) => id !== taskId)].slice(0, 10)
+    if (
+      recentTaskIds.length === current.length &&
+      recentTaskIds.every((id, index) => id === current[index])
+    ) {
+      return
+    }
+    await persist({
+      ...data,
+      settings: { ...data.settings, recentTaskIds }
+    })
+  },
   setBulkSelectedTaskIds: (taskIds) => set({ bulkSelectedTaskIds: taskIds }),
   toggleBulkSelectedTaskId: (taskId) => {
     const current = get().bulkSelectedTaskIds
@@ -115,6 +134,12 @@ export function filterTasksForView(
     tasks = tasks.filter(
       (task) => task.status === 'todo' && task.dueDate !== null && task.dueDate <= today
     )
+    tasks = sortTasksWithPins(tasks)
+    const maxTasks = data.settings.todayOnlyMaxTasks
+    if (maxTasks > 0) {
+      tasks = tasks.slice(0, maxTasks)
+    }
+    return tasks
   } else if (view === 'inbox') {
     tasks = tasks.filter((task) => task.projectId === null && task.status === 'todo')
   } else if (view === 'all') {

@@ -188,6 +188,78 @@ export default function SettingsDialog({
               Напоминать за час до срока
             </label>
 
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.notificationSound}
+                onChange={(e) => void update({ notificationSound: e.target.checked })}
+              />
+              Звук уведомлений
+            </label>
+
+            <div className="rounded-lg border border-surface-border p-3">
+              <p className="mb-2 text-sm font-medium">Сводка дня</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.dailyDigestEnabled}
+                  onChange={(e) => void update({ dailyDigestEnabled: e.target.checked })}
+                />
+                Ежедневная сводка
+              </label>
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <span className="text-gray-400">Час:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={settings.dailyDigestHour}
+                  onChange={(e) => void update({ dailyDigestHour: Number(e.target.value) })}
+                  className="w-16 rounded-lg border border-surface-border bg-surface px-2 py-1"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-surface-border p-3">
+              <p className="mb-2 text-sm font-medium">Интерфейс</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.sidebarCompact}
+                  onChange={(e) => void update({ sidebarCompact: e.target.checked })}
+                />
+                Компактная боковая панель
+              </label>
+              <div className="mt-3 flex items-center gap-3 text-sm">
+                <span className="text-gray-400">Акцентный цвет</span>
+                <input
+                  type="color"
+                  value={settings.accentColor}
+                  onChange={(e) => void update({ accentColor: e.target.value })}
+                  className="h-9 w-12 cursor-pointer rounded border border-surface-border bg-transparent"
+                />
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-sm">
+                <span className="text-gray-400">Лимит «Сегодня» (0 = без лимита):</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={settings.todayOnlyMaxTasks}
+                  onChange={(e) => void update({ todayOnlyMaxTasks: Number(e.target.value) })}
+                  className="w-16 rounded-lg border border-surface-border bg-surface px-2 py-1"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void window.tododesk.exportCsv()}
+              className="w-full rounded-lg border border-surface-border px-4 py-2 text-sm text-gray-300 hover:bg-surface"
+            >
+              Экспорт CSV
+            </button>
+
             <div className="rounded-lg border border-surface-border p-3">
               <p className="mb-2 text-sm font-medium">Автобэкап</p>
               <label className="flex items-center gap-2 text-sm">

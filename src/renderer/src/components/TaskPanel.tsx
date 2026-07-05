@@ -6,6 +6,7 @@ import {
   List,
   Pin,
   Plus,
+  ClipboardPaste,
   Search,
   Tag,
   Trash2,
@@ -54,7 +55,11 @@ function getViewTitle(view: ViewId, data: ReturnType<typeof useAppStore.getState
   return viewTitles[view] ?? 'Задачи'
 }
 
-export default function TaskPanel(): JSX.Element {
+interface TaskPanelProps {
+  onPasteTasks?: () => void
+}
+
+export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.Element {
   const {
     data,
     activeView,
@@ -72,6 +77,7 @@ export default function TaskPanel(): JSX.Element {
   const [showProjectDialog, setShowProjectDialog] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [bulkMode, setBulkMode] = useState(false)
+
 
   const tasks = useMemo(
     () => filterTasksForView(data, activeView, searchQuery, quickFilter),
@@ -217,6 +223,16 @@ export default function TaskPanel(): JSX.Element {
               className="rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
             />
           </div>
+          {!isCompletedView && (
+            <button
+              type="button"
+              onClick={() => onPasteTasks?.()}
+              className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300"
+              title="Ctrl+Shift+V"
+            >
+              <ClipboardPaste size={16} /> Вставить список
+            </button>
+          )}
           {!isCompletedView && (
             <button
               type="button"

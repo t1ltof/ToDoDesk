@@ -25,7 +25,39 @@ import type { ImportPreview } from '../shared/import'
 import { decrypt, encrypt, getDataPassword, isEncrypted } from './encryption'
 import { markSyncWrite } from './syncWatcher'
 
-const APP_VERSION = '0.7.0'
+const APP_VERSION = '0.8.0'
+
+function escapeCsvField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}
+
+export function buildTasksCsv(data: DataPayload): string {
+  const projectMap = new Map(data.projects.map((p) => [p.id, p.name]))
+  const tagMap = new Map(data.tags.map((t) => [t.id, t.name]))
+  const header = 'title,status,dueDate,project,tags,priority'
+  const lines = data.tasks.map((task) => {
+    const project = task.projectId ? (projectMap.get(task.projectId) ?? '') : ''
+    const tags = data.taskTags
+      .filter((link) => link.taskId === task.id)
+      .map((link) => tagMap.get(link.tagId) ?? '')
+      .filter(Boolean)
+      .join('; ')
+    return [task.title, task.status, task.dueDate ?? '', project, tags, task.priority]
+      .map(escapeCsvField)
+      .join(',')
+  })
+  return [header, ...lines].join('\r\n')
+}
+
+export function exportCsvToFile(targetPath: string): { path: string; rowCount: number } {
+  const data = loadData()
+  const csv = buildTasksCsv(data)
+  writeFileSync(targetPath, csv, 'utf-8')
+  return { path: targetPath, rowCount: data.tasks.length }
+}
 
 export interface ExportReport {
   exportedAt: string

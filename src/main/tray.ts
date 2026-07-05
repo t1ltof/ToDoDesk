@@ -22,6 +22,13 @@ export function countTodayTasks(data: DataPayload): number {
   ).length
 }
 
+export function countOverdueTasks(data: DataPayload): number {
+  const today = todayKey()
+  return data.tasks.filter(
+    (task) => task.status === 'todo' && task.dueDate !== null && task.dueDate < today
+  ).length
+}
+
 function getTodayTasks(data: DataPayload, limit = 8) {
   const today = todayKey()
   return data.tasks
@@ -69,9 +76,16 @@ function buildContextMenu(data: DataPayload): Menu {
 export function updateTrayTooltip(data: DataPayload): void {
   if (!tray) return
   const count = countTodayTasks(data)
-  const label = count > 0 ? `ToDoDesk — ${count} на сегодня` : 'ToDoDesk'
+  const overdue = countOverdueTasks(data)
+  let label = 'ToDoDesk'
+  if (count > 0) {
+    label = `ToDoDesk — ${count} на сегодня`
+    if (overdue > 0) label += `, ${overdue} просрочено`
+  } else if (overdue > 0) {
+    label = `ToDoDesk — ${overdue} просрочено`
+  }
   tray.setToolTip(label)
-  tray.setImage(createTrayIconWithCount(count))
+  tray.setImage(createTrayIconWithCount(count, overdue))
   tray.setContextMenu(buildContextMenu(data))
 }
 
@@ -85,7 +99,8 @@ export function createTray(
 
   const data = getData()
   const count = countTodayTasks(data)
-  tray = new Tray(createTrayIconWithCount(count))
+  const overdue = countOverdueTasks(data)
+  tray = new Tray(createTrayIconWithCount(count, overdue))
   updateTrayTooltip(data)
 
   tray.on('double-click', () => {

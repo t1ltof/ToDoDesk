@@ -11,7 +11,7 @@ function escapePsString(value: string): string {
   return value.replace(/'/g, "''")
 }
 
-export function createTrayIconWithCount(count: number): Electron.NativeImage {
+export function createTrayIconWithCount(count: number, overdueCount = 0): Electron.NativeImage {
   const basePath = getTrayIconPath()
   const baseImage = nativeImage.createFromPath(basePath)
 
@@ -20,8 +20,11 @@ export function createTrayIconWithCount(count: number): Electron.NativeImage {
   }
 
   mkdirSync(badgeDir, { recursive: true })
-  const outputPath = join(badgeDir, `tray-${count}.png`)
+  const badgeKey = overdueCount > 0 ? `tray-${count}-od${overdueCount}` : `tray-${count}`
+  const outputPath = join(badgeDir, `${badgeKey}.png`)
   const label = count > 99 ? '99+' : String(count)
+  const badgeArgb =
+    overdueCount > 0 ? '220, 220, 38, 38' : '220, 234, 88, 12'
 
   const script = `
 Add-Type -AssemblyName System.Drawing
@@ -30,7 +33,7 @@ $bmp = New-Object System.Drawing.Bitmap 32, 32
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.SmoothingMode = 'AntiAlias'
 $g.DrawImage($base, 0, 0, 32, 32)
-$brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(220, 239, 68, 68))
+$brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(${badgeArgb}))
 $g.FillEllipse($brush, 18, 0, 14, 14)
 $font = New-Object System.Drawing.Font('Segoe UI', 6, [System.Drawing.FontStyle]::Bold)
 $g.DrawString('${escapePsString(label)}', $font, [System.Drawing.Brushes]::White, 19, 1)

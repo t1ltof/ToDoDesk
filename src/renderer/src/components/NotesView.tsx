@@ -1,6 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Note } from '../../../shared/schema'
+import MarkdownContent from './MarkdownContent'
 import { createNote, deleteNote, updateNote } from '../utils/noteHelpers'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
@@ -9,6 +10,7 @@ export default function NotesView(): JSX.Element {
   const { data, persist } = useAppStore()
   const [selectedId, setSelectedId] = useState<string | null>(data.notes[0]?.id ?? null)
   const [newTitle, setNewTitle] = useState('')
+  const [contentMode, setContentMode] = useState<'edit' | 'preview'>('edit')
 
   const notes = useMemo(
     () => [...data.notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -106,12 +108,31 @@ export default function NotesView(): JSX.Element {
                 <Trash2 size={16} />
               </button>
             </div>
-            <textarea
-              value={selected.content}
-              onChange={(e) => void handleUpdate({ content: e.target.value })}
-              placeholder="Текст заметки..."
-              className="min-h-0 flex-1 resize-none rounded-xl border border-surface-border bg-surface-elevated p-4 text-sm leading-relaxed outline-none focus:border-accent"
-            />
+            <div className="mb-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setContentMode((mode) => (mode === 'edit' ? 'preview' : 'edit'))}
+                className="text-xs text-blue-300 hover:underline"
+              >
+                {contentMode === 'edit' ? 'Просмотр' : 'Редактирование'}
+              </button>
+            </div>
+            {contentMode === 'edit' ? (
+              <textarea
+                value={selected.content}
+                onChange={(e) => void handleUpdate({ content: e.target.value })}
+                placeholder="Текст заметки... Поддерживается Markdown"
+                className="min-h-0 flex-1 resize-none rounded-xl border border-surface-border bg-surface-elevated p-4 text-sm leading-relaxed outline-none focus:border-accent"
+              />
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-border bg-surface-elevated p-4">
+                {selected.content.trim() ? (
+                  <MarkdownContent text={selected.content} />
+                ) : (
+                  <p className="text-sm text-gray-500">Заметка пустая</p>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center text-gray-500">

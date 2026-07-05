@@ -53,12 +53,22 @@ export function collectDescendantIds(data: DataPayload, taskId: string): Set<str
 
 export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
   const ids = collectDescendantIds(data, taskId)
+  const attachments = data.taskAttachments.filter((item) => ids.has(item.taskId))
+  for (const attachment of attachments) {
+    void window.tododesk.deleteAttachmentFile(attachment.filePath)
+  }
+
   return {
     ...data,
     tasks: data.tasks.filter((task) => !ids.has(task.id)),
     taskTags: data.taskTags.filter((link) => !ids.has(link.taskId)),
     checklistItems: data.checklistItems.filter((item) => !ids.has(item.taskId)),
-    reminders: data.reminders.filter((item) => !ids.has(item.taskId))
+    reminders: data.reminders.filter((item) => !ids.has(item.taskId)),
+    taskAttachments: data.taskAttachments.filter((item) => !ids.has(item.taskId)),
+    sprints: data.sprints.map((sprint) => ({
+      ...sprint,
+      taskIds: sprint.taskIds.filter((id) => !ids.has(id))
+    }))
   }
 }
 

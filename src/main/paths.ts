@@ -20,3 +20,7 @@ export function getBackupFilePath(): string {
 export function getBackupsDirectory(): string {
   return join(getDataDirectory(), 'backups')
 }
+
+export function getAttachmentsDirectory(): string {
+  return join(getDataDirectory(), 'attachments')
+}

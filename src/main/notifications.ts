@@ -35,7 +35,8 @@ function showNotification(
   title: string,
   body: string,
   taskId: string | null,
-  getWindow: () => BrowserWindow | null
+  getWindow: () => BrowserWindow | null,
+  playSound: boolean
 ): void {
   if (!Notification.isSupported()) return
 
@@ -49,6 +50,10 @@ function showNotification(
     if (taskId) window.webContents.send('app:open-task', taskId)
   })
   notification.show()
+
+  if (playSound) {
+    getWindow()?.webContents.send('app:notification')
+  }
 }
 
 function collectDueDateReminders(data: DataPayload, settings: Settings, now: Date): Task[] {
@@ -96,6 +101,36 @@ function collectCustomReminders(data: DataPayload, now: Date): Array<{ task: Tas
   return result
 }
 
+function checkDailyDigest(
+  data: DataPayload,
+  settings: Settings,
+  now: Date,
+  getWindow: () => BrowserWindow | null
+): void {
+  if (!settings.dailyDigestEnabled) return
+  if (now.getHours() !== settings.dailyDigestHour || now.getMinutes() !== 0) return
+
+  const today = todayKey()
+  const key = `digest-${today}`
+  if (firedReminders.has(key)) return
+  firedReminders.add(key)
+
+  const todayCount = data.tasks.filter(
+    (task) => task.status === 'todo' && task.dueDate && task.dueDate <= today
+  ).length
+  const overdueCount = data.tasks.filter(
+    (task) => task.status === 'todo' && task.dueDate && task.dueDate < today
+  ).length
+
+  showNotification(
+    'ToDoDesk — сводка дня',
+    `На сегодня: ${todayCount} задач. Просрочено: ${overdueCount}.`,
+    null,
+    getWindow,
+    settings.notificationSound
+  )
+}
+
 export function checkDueTasks(
   data: DataPayload,
   getWindow: () => BrowserWindow | null
@@ -103,55 +138,65 @@ export function checkDueTasks(
   const settings = data.settings
   const now = new Date()
 
-  if (isQuietHours(settings, now)) return
+  if (!isQuietHours(settings, now)) {
+    const dueDateReminders = collectDueDateReminders(data, settings, now)
+    const customReminders = collectCustomReminders(data, now)
 
-  const dueDateReminders = collectDueDateReminders(data, settings, now)
-  const customReminders = collectCustomReminders(data, now)
+    for (const task of dueDateReminders) {
+      const key = `due-${task.id}-${now.toISOString().slice(0, 16)}`
+      if (firedReminders.has(key)) continue
+      firedReminders.add(key)
 
-  for (const task of dueDateReminders) {
-    const key = `due-${task.id}-${now.toISOString().slice(0, 16)}`
-    if (firedReminders.has(key)) continue
-    firedReminders.add(key)
+      const isOverdue = task.dueDate && task.dueDate < todayKey()
+      showNotification(
+        isOverdue ? 'ToDoDesk — просрочено' : 'ToDoDesk — напоминание',
+        task.title,
+        task.id,
+        getWindow,
+        settings.notificationSound
+      )
+    }
 
-    const isOverdue = task.dueDate && task.dueDate < todayKey()
-    showNotification(
-      isOverdue ? 'ToDoDesk — просрочено' : 'ToDoDesk — напоминание',
-      task.title,
-      task.id,
-      getWindow
-    )
-  }
+    for (const { task, reminder } of customReminders) {
+      const key = `custom-${reminder.id}`
+      if (firedReminders.has(key)) continue
+      firedReminders.add(key)
 
-  for (const { task, reminder } of customReminders) {
-    const key = `custom-${reminder.id}`
-    if (firedReminders.has(key)) continue
-    firedReminders.add(key)
+      showNotification(
+        'ToDoDesk — напоминание',
+        task.title,
+        task.id,
+        getWindow,
+        settings.notificationSound
+      )
+    }
 
-    showNotification('ToDoDesk — напоминание', task.title, task.id, getWindow)
-  }
-
-  if (dueDateReminders.length === 0 && customReminders.length === 0) {
-    const today = todayKey()
-    const overdue = data.tasks.filter(
-      (task) => task.status === 'todo' && task.dueDate && task.dueDate < today
-    )
-    if (
-      overdue.length > 0 &&
-      now.getHours() === settings.notificationHour &&
-      now.getMinutes() === settings.notificationMinute
-    ) {
-      const key = `overdue-summary-${today}`
-      if (!firedReminders.has(key)) {
-        firedReminders.add(key)
-        showNotification(
-          'ToDoDesk — просроченные задачи',
-          `${overdue.length} задач(и) просрочено`,
-          overdue[0]?.id ?? null,
-          getWindow
-        )
+    if (dueDateReminders.length === 0 && customReminders.length === 0) {
+      const today = todayKey()
+      const overdue = data.tasks.filter(
+        (task) => task.status === 'todo' && task.dueDate && task.dueDate < today
+      )
+      if (
+        overdue.length > 0 &&
+        now.getHours() === settings.notificationHour &&
+        now.getMinutes() === settings.notificationMinute
+      ) {
+        const key = `overdue-summary-${today}`
+        if (!firedReminders.has(key)) {
+          firedReminders.add(key)
+          showNotification(
+            'ToDoDesk — просроченные задачи',
+            `${overdue.length} задач(и) просрочено`,
+            overdue[0]?.id ?? null,
+            getWindow,
+            settings.notificationSound
+          )
+        }
       }
     }
   }
+
+  checkDailyDigest(data, settings, now, getWindow)
 }
 
 export function scheduleReminders(

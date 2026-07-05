@@ -1,7 +1,7 @@
 import { Download } from 'lucide-react'
 import { useMemo } from 'react'
 import { getStats, useAppStore } from '../store/useAppStore'
-import { getHeatmapDays, getWeekKey } from '../utils/calendarUtils'
+import { getHeatmapDays, getWeekDays, getWeekKey } from '../utils/calendarUtils'
 import { buildWeeklyReport, downloadTextReport } from '../utils/reportExport'
 import { getWeeklyGoalsProgress } from '../utils/weeklyGoalsHelpers'
 import clsx from 'clsx'
@@ -65,6 +65,52 @@ export default function StatsView(): JSX.Element {
   }, [data.tasks])
 
   const max = Math.max(...last7.map((d) => d.count), 1)
+
+  const weekComparison = useMemo(() => {
+    const thisWeekDays = getWeekDays()
+    const thisWeekStart = thisWeekDays[0]
+    const lastWeekStart = new Date(`${thisWeekStart}T12:00:00`)
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+    const lastWeekDays = getWeekDays(lastWeekStart)
+    const lastWeekStartKey = lastWeekDays[0]
+    const lastWeekEndKey = lastWeekDays[6]
+
+    const countInRange = (start: string, end: string): number =>
+      data.tasks.filter(
+        (task) =>
+          task.status === 'done' &&
+          task.completedAt &&
+          task.completedAt.slice(0, 10) >= start &&
+          task.completedAt.slice(0, 10) <= end
+      ).length
+
+    const thisWeek = countInRange(thisWeekStart, thisWeekDays[6])
+    const lastWeek = countInRange(lastWeekStartKey, lastWeekEndKey)
+    const delta = thisWeek - lastWeek
+
+    return { thisWeek, lastWeek, delta }
+  }, [data.tasks])
+
+  const loadForecast = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date()
+      date.setDate(date.getDate() + index)
+      const key = date.toISOString().slice(0, 10)
+      const count = data.tasks.filter(
+        (task) =>
+          task.status === 'todo' &&
+          !task.archived &&
+          task.dueDate === key
+      ).length
+      return {
+        label: date.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' }),
+        count,
+        key
+      }
+    })
+  }, [data.tasks])
+
+  const forecastMax = Math.max(...loadForecast.map((day) => day.count), 1)
 
   const handleExport = (): void => {
     const report = buildWeeklyReport(data)
@@ -144,6 +190,56 @@ export default function StatsView(): JSX.Element {
             <div className="h-3 w-3 rounded-sm bg-green-400" />
           </div>
           <span>Больше</span>
+        </div>
+      </div>
+
+      <div className="mt-8 grid grid-cols-2 gap-4">
+        <div className="rounded-xl border border-surface-border bg-surface-elevated p-6">
+          <h3 className="mb-4 font-medium">Сравнение недель</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-400">Эта неделя</p>
+              <p className="mt-1 text-3xl font-bold text-green-300">{weekComparison.thisWeek}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Прошлая неделя</p>
+              <p className="mt-1 text-3xl font-bold text-gray-300">{weekComparison.lastWeek}</p>
+            </div>
+          </div>
+          <p
+            className={clsx(
+              'mt-4 text-sm',
+              weekComparison.delta > 0
+                ? 'text-green-300'
+                : weekComparison.delta < 0
+                  ? 'text-red-300'
+                  : 'text-gray-400'
+            )}
+          >
+            {weekComparison.delta > 0 && `+${weekComparison.delta} к прошлой неделе`}
+            {weekComparison.delta < 0 && `${weekComparison.delta} к прошлой неделе`}
+            {weekComparison.delta === 0 && 'Без изменений к прошлой неделе'}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-surface-border bg-surface-elevated p-6">
+          <h3 className="mb-4 font-medium">Прогноз нагрузки (7 дней)</h3>
+          <p className="mb-3 text-xs text-gray-500">Активные задачи со сроком на каждый день</p>
+          <div className="flex h-32 items-end gap-2">
+            {loadForecast.map((day) => (
+              <div key={day.key} className="flex flex-1 flex-col items-center gap-1">
+                <div
+                  className="w-full rounded-t bg-amber-500/80 transition-all"
+                  style={{
+                    height: `${(day.count / forecastMax) * 100}%`,
+                    minHeight: day.count > 0 ? 8 : 2
+                  }}
+                />
+                <span className="text-[10px] text-gray-500">{day.label}</span>
+                <span className="text-[10px] text-gray-400">{day.count}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

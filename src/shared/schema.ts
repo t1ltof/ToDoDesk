@@ -1,10 +1,17 @@
 import { z } from 'zod'
 
-export const FORMAT_VERSION = '1.3'
+export const FORMAT_VERSION = '1.4'
 
 export const prioritySchema = z.enum(['normal', 'important'])
 export const statusSchema = z.enum(['todo', 'done'])
-export const recurrenceSchema = z.enum(['none', 'daily', 'weekly', 'monthly'])
+export const recurrenceSchema = z.enum([
+  'none',
+  'daily',
+  'weekly',
+  'monthly',
+  'weekdays',
+  'weekends'
+])
 export const themeSchema = z.enum(['dark', 'amoled', 'light'])
 export const fontSizeSchema = z.enum(['compact', 'normal', 'large'])
 export const boardNodeStyleSchema = z.enum(['card', 'sticker', 'photo', 'document'])
@@ -150,6 +157,57 @@ export const weeklyGoalSchema = z.object({
   completed: z.boolean().default(false)
 })
 
+export const taskAttachmentSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  fileName: z.string().min(1),
+  filePath: z.string().min(1),
+  addedAt: z.string()
+})
+
+export const sprintSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  startDate: z.string(),
+  endDate: z.string(),
+  goal: z.string().default(''),
+  taskIds: z.array(z.string().uuid()).default([]),
+  completed: z.boolean().default(false)
+})
+
+export const boardSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  createdAt: z.string(),
+  nodes: z.array(boardNodeSchema),
+  links: z.array(boardLinkSchema)
+})
+
+export const smartRuleSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  enabled: z.boolean().default(true),
+  condition: z.literal('overdue_days'),
+  days: z.number().int().min(1),
+  action: z.enum(['move_inbox', 'add_tag']),
+  tagId: z.string().uuid().optional()
+})
+
+export const draftSchema = z.object({
+  entityType: z.literal('task'),
+  entityId: z.string().uuid(),
+  title: z.string(),
+  description: z.string().default(''),
+  updatedAt: z.string()
+})
+
+export const boardHistoryEntrySchema = z.object({
+  id: z.string().uuid(),
+  timestamp: z.string(),
+  nodes: z.array(boardNodeSchema),
+  links: z.array(boardLinkSchema)
+})
+
 export const settingsSchema = z.object({
   autostart: z.boolean().default(false),
   startMinimized: z.boolean().default(false),
@@ -170,7 +228,15 @@ export const settingsSchema = z.object({
   syncFolderPath: z.string().nullable().default(null),
   dataPasswordEnabled: z.boolean().default(false),
   pomodoroWorkMinutes: z.number().int().min(1).max(120).default(25),
-  pomodoroBreakMinutes: z.number().int().min(1).max(60).default(5)
+  pomodoroBreakMinutes: z.number().int().min(1).max(60).default(5),
+  accentColor: z.string().default('#3b82f6'),
+  sidebarCompact: z.boolean().default(false),
+  boardAnimations: z.boolean().default(true),
+  notificationSound: z.boolean().default(false),
+  dailyDigestEnabled: z.boolean().default(false),
+  dailyDigestHour: z.number().int().min(0).max(23).default(8),
+  recentTaskIds: z.array(z.string().uuid()).default([]),
+  todayOnlyMaxTasks: z.number().int().min(0).max(50).default(0)
 })
 
 export const dataPayloadSchema = z.object({
@@ -188,6 +254,12 @@ export const dataPayloadSchema = z.object({
   boardNodes: z.array(boardNodeSchema).default([]),
   boardLinks: z.array(boardLinkSchema).default([]),
   boardGroups: z.array(boardGroupSchema).default([]),
+  taskAttachments: z.array(taskAttachmentSchema).default([]),
+  sprints: z.array(sprintSchema).default([]),
+  boardSnapshots: z.array(boardSnapshotSchema).default([]),
+  smartRules: z.array(smartRuleSchema).default([]),
+  drafts: z.array(draftSchema).default([]),
+  boardHistory: z.array(boardHistoryEntrySchema).default([]),
   settings: settingsSchema
 })
 
@@ -221,6 +293,12 @@ export type BoardNode = z.infer<typeof boardNodeSchema>
 export type BoardLink = z.infer<typeof boardLinkSchema>
 export type BoardGroup = z.infer<typeof boardGroupSchema>
 export type WeeklyGoal = z.infer<typeof weeklyGoalSchema>
+export type TaskAttachment = z.infer<typeof taskAttachmentSchema>
+export type Sprint = z.infer<typeof sprintSchema>
+export type BoardSnapshot = z.infer<typeof boardSnapshotSchema>
+export type SmartRule = z.infer<typeof smartRuleSchema>
+export type Draft = z.infer<typeof draftSchema>
+export type BoardHistoryEntry = z.infer<typeof boardHistoryEntrySchema>
 export type Settings = z.infer<typeof settingsSchema>
 export type DataPayload = z.infer<typeof dataPayloadSchema>
 export type DataFile = z.infer<typeof dataFileSchema>
@@ -235,6 +313,10 @@ export type ViewId =
   | 'board'
   | 'notes'
   | 'focus'
+  | 'timeline'
+  | 'sprint'
+  | 'next'
+  | 'weekly-review'
   | `tag:${string}`
   | `project:${string}`
   | `kanban:${string}`
@@ -261,6 +343,12 @@ export function createEmptyData(): DataPayload {
     boardNodes: [],
     boardLinks: [],
     boardGroups: [],
+    taskAttachments: [],
+    sprints: [],
+    boardSnapshots: [],
+    smartRules: [],
+    drafts: [],
+    boardHistory: [],
     settings: { ...defaultSettings }
   }
 }
@@ -319,6 +407,14 @@ export function migratePayload(raw: unknown): DataPayload {
     boardNodes,
     boardLinks: data.boardLinks ?? [],
     boardGroups: data.boardGroups ?? [],
+    taskAttachments: data.taskAttachments ?? [],
+    sprints: data.sprints ?? [],
+    boardSnapshots: data.boardSnapshots ?? [],
+    smartRules: data.smartRules ?? [],
+    drafts: data.drafts ?? [],
+    boardHistory: Array.isArray(data.boardHistory)
+      ? (data.boardHistory as unknown[]).slice(0, 20)
+      : [],
     settings: { ...defaultSettings, ...(data.settings as object) }
   })
 }

@@ -15,7 +15,9 @@ const VIEW_SHORTCUTS: ViewId[] = [
 
 export function useKeyboardShortcuts(
   onQuickAdd: () => void,
-  onGlobalSearch: () => void
+  onGlobalSearch: () => void,
+  onCommandPalette: () => void,
+  onPasteTasks?: () => void
 ): void {
   const { undo, selectedTaskId, persist, setSelectedTaskId, setActiveView } = useAppStore()
 
@@ -40,6 +42,18 @@ export function useKeyboardShortcuts(
       if (event.ctrlKey && (event.key === 'f' || event.key === 'F')) {
         event.preventDefault()
         onGlobalSearch()
+        return
+      }
+
+      if (event.ctrlKey && (event.key === 'k' || event.key === 'K')) {
+        event.preventDefault()
+        onCommandPalette()
+        return
+      }
+
+      if (event.ctrlKey && event.shiftKey && (event.key === 'v' || event.key === 'V')) {
+        event.preventDefault()
+        onPasteTasks?.()
         return
       }
 
@@ -69,5 +83,15 @@ export function useKeyboardShortcuts(
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [undo, selectedTaskId, persist, setSelectedTaskId, setActiveView, onQuickAdd, onGlobalSearch])
+  }, [
+    undo,
+    selectedTaskId,
+    persist,
+    setSelectedTaskId,
+    setActiveView,
+    onQuickAdd,
+    onGlobalSearch,
+    onCommandPalette,
+    onPasteTasks
+  ])
 }

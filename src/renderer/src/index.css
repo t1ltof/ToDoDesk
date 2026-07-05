@@ -16,10 +16,12 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 #root {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Theme: dark (default) */
@@ -89,6 +91,30 @@ body,
 .theme-amoled .bg-accent,
 .theme-light .bg-accent {
   background-color: var(--accent);
+}
+
+.theme-dark .border-accent,
+.theme-amoled .border-accent,
+.theme-light .border-accent {
+  border-color: var(--accent);
+}
+
+.theme-dark .text-accent,
+.theme-amoled .text-accent,
+.theme-light .text-accent {
+  color: var(--accent);
+}
+
+.theme-dark .hover\:bg-accent:hover,
+.theme-amoled .hover\:bg-accent:hover,
+.theme-light .hover\:bg-accent:hover {
+  background-color: var(--accent);
+}
+
+.theme-dark .focus\:border-accent:focus,
+.theme-amoled .focus\:border-accent:focus,
+.theme-light .focus\:border-accent:focus {
+  border-color: var(--accent);
 }
 
 .theme-dark .text-gray-300,

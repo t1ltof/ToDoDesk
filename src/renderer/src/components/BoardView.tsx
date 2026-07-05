@@ -1,15 +1,23 @@
 import {
+  AlignVerticalJustifyCenter,
+  Camera,
+  Clock,
   Filter,
   GitBranch,
+  Grid3x3,
+  History,
   Lightbulb,
   Link2,
   ListPlus,
+  Lock,
   Maximize,
   Minimize,
   Minus,
   Palette,
   Plus,
   RotateCcw,
+  Save,
+  Star,
   Trash2
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
@@ -20,19 +28,31 @@ import {
   BOARD_WIDTH,
   addBoardLink,
   addBoardNode,
+  alignBoardNodes,
   clampNodePosition,
   createIdeaNode,
   createTaskNode,
   deleteBoardLink,
   deleteBoardNode,
+  exportBoardPng,
   filterBoardNodes,
+  getBoardNodePreview,
+  getBoardSnapshots,
   getNodeStyleClasses,
+  gridLayoutBoardNodes,
+  isBoardAnimationsEnabled,
   linkPath,
   moveBoardNodes,
+  nodesIntersectingRect,
+  restoreBoardSnapshot,
+  saveBoardSnapshot,
   screenToWorld,
   suggestLinkOnProximity,
+  undoBoardHistory,
   updateBoardLink,
-  updateBoardNode
+  updateBoardNode,
+  withBoardHistory,
+  worldRectFromScreen
 } from '../utils/boardHelpers'
 import {
   BOARD_BACKGROUND_PRESETS,
@@ -40,6 +60,7 @@ import {
   getBoardSurfaceStyle,
   normalizeBoardBackground
 } from '../utils/boardBackground'
+import { getChildTasks } from '../store/useAppStore'
 import { createRootTask } from '../utils/taskHelpers'
 import BoardAddTaskDialog from './BoardAddTaskDialog'
 import BoardInputDialog from './BoardInputDialog'
@@ -48,7 +69,10 @@ import clsx from 'clsx'
 
 const CLICK_DRAG_THRESHOLD = 5
 
-type BoardInputDialogState = { kind: 'link'; linkId: string; defaultValue: string } | null
+type BoardInputDialogState =
+  | { kind: 'link'; linkId: string; defaultValue: string }
+  | { kind: 'snapshot'; defaultValue: string }
+  | null
 const MINIMAP_W = 168
 const MINIMAP_H = 126
 
@@ -67,6 +91,14 @@ type BoardFilter = 'all' | `project:${string}` | `tag:${string}`
 
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; originPanX: number; originPanY: number }
+  | {
+      kind: 'marquee'
+      startX: number
+      startY: number
+      endX: number
+      endY: number
+      additive: boolean
+    }
   | {
       kind: 'nodes'
       primaryNodeId: string
@@ -96,17 +128,23 @@ function BoardNodeCard({
   onDelete,
   onDragStart,
   onStyleChange,
-  linkMode
+  onSubtaskClick,
+  linkMode,
+  isDragging,
+  animatePosition
 }: {
   node: BoardNode
   task: Task | null
   selected: boolean
   linkSource: boolean
   linkMode: boolean
+  isDragging: boolean
+  animatePosition: boolean
   onActivate: (additive: boolean) => void
   onDelete: () => void
   onDragStart: (e: ReactMouseEvent) => void
   onStyleChange: (style: BoardNodeStyle) => void
+  onSubtaskClick: (taskId: string) => void
 }): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(node.title)
@@ -122,13 +160,19 @@ function BoardNodeCard({
       return
     }
     if (trimmedTitle !== node.title || notes !== node.notes) {
-      await persist(updateBoardNode(data, node.id, { title: trimmedTitle, notes }))
+      await persist(
+        withBoardHistory(data, updateBoardNode(data, node.id, { title: trimmedTitle, notes }))
+      )
     }
   }
 
   const accent = task ? getProjectColor(data.projects, task.projectId) : node.color
   const styleClasses = getNodeStyleClasses(node.style)
   const isAltStyle = node.style !== 'card'
+  const preview = task ? getBoardNodePreview(data, task) : null
+  const subtasks = task ? getChildTasks(data, task.id) : []
+  const visibleSubtasks = subtasks.slice(0, 3)
+  const hiddenSubtaskCount = Math.max(0, subtasks.length - 3)
 
   const handleCardClick = (e: ReactMouseEvent): void => {
     if (editing) return
@@ -159,7 +203,8 @@ function BoardNodeCard({
         left: node.x,
         top: node.y,
         width: node.width,
-        minHeight: node.height
+        minHeight: node.height,
+        transition: animatePosition && !isDragging ? 'left 0.2s ease, top 0.2s ease' : undefined
       }}
       onClick={handleCardClick}
       onDoubleClick={(e) => {
@@ -252,23 +297,123 @@ function BoardNodeCard({
           </>
         ) : (
           <>
-            <p className={clsx('text-sm font-medium leading-snug', isAltStyle ? '' : 'text-gray-100')}>
-              {node.title}
-            </p>
+            <div className="flex items-start justify-between gap-1">
+              <p className={clsx('min-w-0 flex-1 text-sm font-medium leading-snug', isAltStyle ? '' : 'text-gray-100')}>
+                {node.title}
+              </p>
+              {preview && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {preview.overdue && (
+                    <span title="Просрочено">
+                      <Clock size={12} className="text-red-400" />
+                    </span>
+                  )}
+                  {preview.important && (
+                    <span title="Важная">
+                      <Star size={12} className="fill-amber-400 text-amber-400" />
+                    </span>
+                  )}
+                  {preview.blocked && (
+                    <span title="Заблокирована зависимостью">
+                      <Lock size={12} className="text-orange-400" />
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {preview && (preview.dueLabel || preview.tagNames.length > 0 || preview.checklist) && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                {preview.dueLabel && (
+                  <span
+                    className={clsx(
+                      'rounded px-1.5 py-0.5',
+                      preview.overdue
+                        ? 'bg-red-950/50 text-red-300'
+                        : isAltStyle
+                          ? 'bg-black/10 opacity-80'
+                          : 'bg-surface/60 text-gray-400'
+                    )}
+                  >
+                    {preview.dueLabel}
+                  </span>
+                )}
+                {preview.tagNames.map((tagName) => (
+                  <span
+                    key={tagName}
+                    className={clsx(
+                      'rounded px-1.5 py-0.5',
+                      isAltStyle ? 'bg-black/10 opacity-80' : 'bg-accent/20 text-accent'
+                    )}
+                  >
+                    {tagName}
+                  </span>
+                ))}
+                {preview.checklist && (
+                  <span className={clsx(isAltStyle ? 'opacity-70' : 'text-gray-500')}>
+                    {preview.checklist.done}/{preview.checklist.total}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {preview?.slaLabel && (
+              <p
+                className={clsx(
+                  'text-[10px]',
+                  preview.overdue ? 'text-red-400' : isAltStyle ? 'opacity-70' : 'text-gray-500'
+                )}
+              >
+                {preview.slaLabel}
+              </p>
+            )}
+
             {node.notes && (
-              <p className={clsx('line-clamp-3 text-xs leading-relaxed', isAltStyle ? 'opacity-70' : 'text-gray-400')}>
+              <p className={clsx('line-clamp-2 text-xs leading-relaxed', isAltStyle ? 'opacity-70' : 'text-gray-400')}>
                 {node.notes}
               </p>
             )}
+
             {task && (
               <span
                 className={clsx(
-                  'mt-auto text-[10px] uppercase tracking-wide',
+                  'text-[10px] uppercase tracking-wide',
                   task.status === 'done' ? 'text-green-400' : 'text-gray-500'
                 )}
               >
                 {task.status === 'done' ? 'Выполнено' : 'Активна'}
               </span>
+            )}
+
+            {visibleSubtasks.length > 0 && (
+              <div className="flex flex-wrap gap-1 border-t border-black/10 pt-2">
+                {visibleSubtasks.map((subtask) => (
+                  <button
+                    key={subtask.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSubtaskClick(subtask.id)
+                    }}
+                    className={clsx(
+                      'max-w-full truncate rounded-full px-2 py-0.5 text-[10px] transition hover:opacity-90',
+                      subtask.status === 'done'
+                        ? 'bg-green-950/40 text-green-300 line-through'
+                        : isAltStyle
+                          ? 'bg-black/10'
+                          : 'bg-surface/80 text-gray-300 hover:bg-surface-border'
+                    )}
+                    title={subtask.title}
+                  >
+                    {subtask.title}
+                  </button>
+                ))}
+                {hiddenSubtaskCount > 0 && (
+                  <span className={clsx('px-1 text-[10px]', isAltStyle ? 'opacity-70' : 'text-gray-500')}>
+                    +{hiddenSubtaskCount}
+                  </span>
+                )}
+              </div>
             )}
           </>
         )}
@@ -424,6 +569,14 @@ function BoardMinimap({
 
 export default function BoardView(): JSX.Element {
   const { data, persist, setSelectedTaskId } = useAppStore()
+
+  const persistBoard = useCallback(
+    async (next: ReturnType<typeof useAppStore.getState>['data']): Promise<void> => {
+      const current = useAppStore.getState().data
+      await persist(withBoardHistory(current, next))
+    },
+    [persist]
+  )
   const sectionRef = useRef<HTMLElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const boardRef = useRef<HTMLDivElement>(null)
@@ -569,7 +722,7 @@ export default function BoardView(): JSX.Element {
         setSelectedNodeIds(new Set())
       }
       if (e.key === 'Delete' && selectedLinkId) {
-        void persist(deleteBoardLink(data, selectedLinkId))
+        void persistBoard(deleteBoardLink(data, selectedLinkId))
         setSelectedLinkId(null)
       }
     }
@@ -582,7 +735,7 @@ export default function BoardView(): JSX.Element {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [data, persist, selectedLinkId])
+  }, [data, persistBoard, selectedLinkId])
 
   useEffect(() => {
     const onFsChange = (): void => setFullscreen(Boolean(document.fullscreenElement))
@@ -664,6 +817,15 @@ export default function BoardView(): JSX.Element {
         return
       }
 
+      if (currentDrag.kind === 'marquee') {
+        setDrag({
+          ...currentDrag,
+          endX: e.clientX,
+          endY: e.clientY
+        })
+        return
+      }
+
       if (currentDrag.kind !== 'nodes') return
 
       const rect = containerRef.current?.getBoundingClientRect()
@@ -707,9 +869,37 @@ export default function BoardView(): JSX.Element {
     const onUp = (): void => {
       void (async () => {
         const currentDrag = dragRef.current
-        if (currentDrag?.kind === 'nodes' && currentDrag.moved) {
+        if (currentDrag?.kind === 'marquee') {
+          const rect = containerRef.current?.getBoundingClientRect()
+          if (rect) {
+            const worldRect = worldRectFromScreen(
+              currentDrag.startX,
+              currentDrag.startY,
+              currentDrag.endX,
+              currentDrag.endY,
+              rect,
+              panRef.current.x,
+              panRef.current.y,
+              zoomRef.current
+            )
+            if (worldRect.width > 4 || worldRect.height > 4) {
+              const hits = nodesIntersectingRect(filteredNodes, worldRect)
+              const hitIds = hits.map((node) => node.id)
+              setSelectedNodeIds((prev) => {
+                if (currentDrag.additive) {
+                  const next = new Set(prev)
+                  for (const id of hitIds) next.add(id)
+                  return next
+                }
+                return new Set(hitIds)
+              })
+              setSelectedLinkId(null)
+              suppressNodeClickRef.current = true
+            }
+          }
+        } else if (currentDrag?.kind === 'nodes' && currentDrag.moved) {
           const current = useAppStore.getState().data
-          await persist(current)
+          await persistBoard(current)
 
           const suggestion = suggestLinkOnProximity(current.boardNodes, currentDrag.primaryNodeId)
           if (suggestion) {
@@ -730,7 +920,7 @@ export default function BoardView(): JSX.Element {
             }
           }
         } else if (currentDrag?.kind === 'nodes') {
-          await persist(useAppStore.getState().data)
+          await persistBoard(useAppStore.getState().data)
         }
         setDrag(null)
         window.setTimeout(() => {
@@ -745,7 +935,7 @@ export default function BoardView(): JSX.Element {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [clampPan, drag, persist])
+  }, [clampPan, drag, filteredNodes, persist])
 
   const isPanTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
@@ -775,13 +965,25 @@ export default function BoardView(): JSX.Element {
     const panButton =
       e.button === 1 ||
       e.button === 2 ||
-      (e.button === 0 && spacePressed) ||
-      (e.button === 0 && background && !linkMode)
+      (e.button === 0 && spacePressed)
 
     if (panButton) {
       e.preventDefault()
       startPan(e.clientX, e.clientY)
-      if (e.button === 0 && background) {
+      return
+    }
+
+    if (e.button === 0 && background && !linkMode && !spacePressed) {
+      e.preventDefault()
+      setDrag({
+        kind: 'marquee',
+        startX: e.clientX,
+        startY: e.clientY,
+        endX: e.clientX,
+        endY: e.clientY,
+        additive: e.shiftKey
+      })
+      if (!e.shiftKey) {
         setSelectedNodeIds(new Set())
         setSelectedLinkId(null)
         setLinkFromId(null)
@@ -861,7 +1063,7 @@ export default function BoardView(): JSX.Element {
       return
     }
 
-    await persist(addBoardLink(data, linkFromId, nodeId))
+    await persistBoard(addBoardLink(data, linkFromId, nodeId))
     setLinkFromId(null)
     setLinkMode(false)
     showHint('Связь создана')
@@ -869,7 +1071,7 @@ export default function BoardView(): JSX.Element {
 
   const confirmPendingLink = async (): Promise<void> => {
     if (!pendingLink) return
-    await persist(addBoardLink(data, pendingLink.fromNodeId, pendingLink.toNodeId))
+    await persistBoard(addBoardLink(data, pendingLink.fromNodeId, pendingLink.toNodeId))
     setPendingLink(null)
     setHint(null)
     showHint('Связь создана')
@@ -887,24 +1089,71 @@ export default function BoardView(): JSX.Element {
     const current = useAppStore.getState().data
 
     if (dialog.kind === 'link') {
-      await persist(updateBoardLink(current, dialog.linkId, { label: value }))
+      await persistBoard(updateBoardLink(current, dialog.linkId, { label: value }))
+    } else if (dialog.kind === 'snapshot') {
+      await persistBoard(saveBoardSnapshot(current, value))
+      showHint('Снимок сохранён')
     }
 
     setInputDialog(null)
   }
 
+  const handleAlignSelected = async (): Promise<void> => {
+    if (selectedNodeIds.size < 2) return
+    const primaryId = [...selectedNodeIds][0]
+    await persistBoard(alignBoardNodes(data, [...selectedNodeIds], primaryId))
+    showHint('Блоки выровнены')
+  }
+
+  const handleGridSelected = async (): Promise<void> => {
+    if (selectedNodeIds.size < 2) return
+    await persistBoard(gridLayoutBoardNodes(data, [...selectedNodeIds]))
+    showHint('Блоки размещены сеткой')
+  }
+
+  const handleRestoreSnapshot = async (snapshotId: string): Promise<void> => {
+    if (!snapshotId) return
+    await persistBoard(restoreBoardSnapshot(data, snapshotId))
+    setSelectedNodeIds(new Set())
+    setSelectedLinkId(null)
+    showHint('Снимок восстановлен')
+  }
+
+  const handleExportPng = (): void => {
+    exportBoardPng(filteredNodes, links, boardBackground)
+    showHint('PNG экспортирован')
+  }
+
+  const boardSnapshots = getBoardSnapshots(data)
+  const boardAnimations = isBoardAnimationsEnabled(data)
+  const draggingNodeIds =
+    drag?.kind === 'nodes' ? new Set(drag.nodeIds) : new Set<string>()
+
   const addIdea = async (): Promise<void> => {
     const center = getViewportCenter()
     const node = createIdeaNode(center.x - 110, center.y - 65)
-    await persist(addBoardNode(data, node))
+    await persistBoard(addBoardNode(data, node))
     setSelectedNodeIds(new Set([node.id]))
+  }
+
+  const handleUndoBoard = async (): Promise<void> => {
+    const current = useAppStore.getState().data
+    const restored = undoBoardHistory(current)
+    if (!restored) {
+      showHint('История доски пуста')
+      return
+    }
+    await persist(restored)
+    setSelectedNodeIds(new Set())
+    setSelectedLinkId(null)
+    showHint('Доска откачена')
   }
 
   const addTask = async (task: Task): Promise<void> => {
     const center = getViewportCenter()
     const color = getProjectColor(data.projects, task.projectId)
     const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color)
-    await persist(addBoardNode(data, node))
+    await persistBoard(addBoardNode(data, node))
     setAddTaskOpen(false)
     setSelectedNodeIds(new Set([node.id]))
   }
@@ -916,7 +1165,7 @@ export default function BoardView(): JSX.Element {
     const color = getProjectColor(next.projects, projectId)
     const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color)
     next = addBoardNode(next, node)
-    await persist(next)
+    await persistBoard(next)
     setNewTaskOpen(false)
     setSelectedNodeIds(new Set([node.id]))
     setSelectedTaskId(task.id)
@@ -939,7 +1188,7 @@ export default function BoardView(): JSX.Element {
   }
 
   const deleteNode = async (nodeId: string): Promise<void> => {
-    await persist(deleteBoardNode(data, nodeId))
+    await persistBoard(deleteBoardNode(data, nodeId))
     setSelectedNodeIds((prev) => {
       if (!prev.has(nodeId)) return prev
       const next = new Set(prev)
@@ -1032,6 +1281,81 @@ export default function BoardView(): JSX.Element {
         >
           <Link2 size={16} />
           Связать
+        </button>
+
+        {selectedNodeIds.size > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => void handleAlignSelected()}
+              className="flex items-center gap-1.5 rounded-lg border border-surface-border px-3 py-1.5 text-sm hover:bg-surface-border/60"
+              title="Выровнять по верхнему краю первого блока"
+            >
+              <AlignVerticalJustifyCenter size={16} />
+              Выровнять
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleGridSelected()}
+              className="flex items-center gap-1.5 rounded-lg border border-surface-border px-3 py-1.5 text-sm hover:bg-surface-border/60"
+              title="Разместить выбранные блоки сеткой"
+            >
+              <Grid3x3 size={16} />
+              Сетка
+            </button>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void handleUndoBoard()}
+          disabled={data.boardHistory.length === 0}
+          className="flex items-center gap-1.5 rounded-lg border border-surface-border px-3 py-1.5 text-sm hover:bg-surface-border/60 disabled:cursor-not-allowed disabled:opacity-40"
+          title="Откатить последнее изменение доски"
+        >
+          <RotateCcw size={16} />
+          Откатить доску
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setInputDialog({ kind: 'snapshot', defaultValue: '' })}
+          className="flex items-center gap-1.5 rounded-lg border border-surface-border px-3 py-1.5 text-sm hover:bg-surface-border/60"
+          title="Сохранить снимок доски"
+        >
+          <Save size={16} />
+          Снимок
+        </button>
+
+        {boardSnapshots.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <History size={14} className="text-gray-500" />
+            <select
+              value=""
+              onChange={(e) => void handleRestoreSnapshot(e.target.value)}
+              className="rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
+              title="Восстановить снимок"
+            >
+              <option value="">Восстановить…</option>
+              {[...boardSnapshots]
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map((snapshot) => (
+                  <option key={snapshot.id} value={snapshot.id}>
+                    {snapshot.name} ({new Date(snapshot.createdAt).toLocaleString('ru-RU')})
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleExportPng}
+          className="flex items-center gap-1.5 rounded-lg border border-surface-border px-3 py-1.5 text-sm hover:bg-surface-border/60"
+          title="Экспорт доски в PNG"
+        >
+          <Camera size={16} />
+          PNG
         </button>
 
         <div className="ml-auto flex items-center gap-1">
@@ -1162,7 +1486,13 @@ export default function BoardView(): JSX.Element {
         data-board-pan="true"
         className={clsx(
           'relative min-h-0 w-full flex-1 overflow-hidden',
-          drag?.kind === 'pan' ? 'cursor-grabbing' : 'cursor-grab'
+          drag?.kind === 'pan'
+            ? 'cursor-grabbing'
+            : drag?.kind === 'marquee'
+              ? 'cursor-crosshair'
+              : spacePressed
+                ? 'cursor-grab'
+                : 'cursor-default'
         )}
         style={boardCanvasStyle}
         onWheel={handleWheel}
@@ -1221,15 +1551,34 @@ export default function BoardView(): JSX.Element {
                 task={task}
                 selected={selectedNodeIds.has(node.id)}
                 linkSource={linkFromId === node.id}
+                isDragging={draggingNodeIds.has(node.id)}
+                animatePosition={boardAnimations}
                 onActivate={(additive) => void handleNodeActivate(node.id, additive)}
                 onDelete={() => void deleteNode(node.id)}
                 onDragStart={handleNodeDragStart(node.id)}
-                onStyleChange={(style) => void persist(updateBoardNode(data, node.id, { style }))}
+                onStyleChange={(style) =>
+                  void persistBoard(updateBoardNode(data, node.id, { style }))
+                }
+                onSubtaskClick={(taskId) => setSelectedTaskId(taskId)}
                 linkMode={linkMode}
               />
             )
           })}
         </div>
+
+        {drag?.kind === 'marquee' && containerRef.current && (() => {
+          const rect = containerRef.current!.getBoundingClientRect()
+          const left = Math.min(drag.startX, drag.endX) - rect.left
+          const top = Math.min(drag.startY, drag.endY) - rect.top
+          const width = Math.abs(drag.endX - drag.startX)
+          const height = Math.abs(drag.endY - drag.startY)
+          return (
+            <div
+              className="pointer-events-none absolute z-30 border-2 border-dashed border-amber-400 bg-amber-400/10"
+              style={{ left, top, width, height }}
+            />
+          )
+        })()}
 
         <BoardMinimap
           nodes={allNodes}
@@ -1241,14 +1590,14 @@ export default function BoardView(): JSX.Element {
       </div>
 
       <footer className="shrink-0 border-t border-surface-border bg-surface-elevated px-4 py-1.5 text-xs text-gray-500">
-        Ctrl + клик — выделить несколько блоков · Перетаскивание — перемещение выделенных · Колёсико — масштаб
+        Рамка — выделение · Shift + рамка — добавить к выделению · Ctrl + клик — несколько блоков · Пробел + перетаскивание — панорама · Колёсико — масштаб
         {selectedNodeIds.size > 1 && (
           <span className="ml-2 text-amber-400">Выбрано: {selectedNodeIds.size}</span>
         )}
         {selectedLinkId && (
           <button
             type="button"
-            onClick={() => void persist(deleteBoardLink(data, selectedLinkId))}
+            onClick={() => void persistBoard(deleteBoardLink(data, selectedLinkId))}
             className="ml-3 text-red-400 hover:underline"
           >
             Удалить связь
@@ -1272,12 +1621,14 @@ export default function BoardView(): JSX.Element {
       )}
 
       <BoardInputDialog
-        open={inputDialog?.kind === 'link'}
-        title="Подпись связи"
-        label="Текст на нити"
-        defaultValue={inputDialog?.kind === 'link' ? inputDialog.defaultValue : ''}
-        placeholder="зависит от, следующий шаг..."
-        submitLabel="Сохранить"
+        open={inputDialog !== null}
+        title={inputDialog?.kind === 'snapshot' ? 'Снимок доски' : 'Подпись связи'}
+        label={inputDialog?.kind === 'snapshot' ? 'Название снимка' : 'Текст на нити'}
+        defaultValue={inputDialog?.defaultValue ?? ''}
+        placeholder={
+          inputDialog?.kind === 'snapshot' ? 'Например: до реорганизации' : 'зависит от, следующий шаг...'
+        }
+        submitLabel={inputDialog?.kind === 'snapshot' ? 'Сохранить' : 'Сохранить'}
         onClose={() => setInputDialog(null)}
         onSubmit={(value) => void handleInputDialogSubmit(value)}
       />

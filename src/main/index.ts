@@ -1,8 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import {
+  copyAttachmentToStorage,
+  deleteAttachmentFile,
+  getFullAttachmentPath
+} from './attachments'
 import { join } from 'path'
 import { applyAutostart } from './autostart'
 import {
   buildExportReport,
+  exportCsvToFile,
   exportToFile,
   importFromPath,
   loadData,
@@ -16,14 +22,21 @@ import { checkDueTasks, scheduleReminders } from './notifications'
 import { getIconPath } from './resources'
 import { createTray, destroyTray, updateTrayTooltip } from './tray'
 import { checkForUpdates } from './updates'
-import { startSyncWatcher, stopSyncWatcher } from './syncWatcher'
+import {
+  resolveSyncConflict,
+  setSyncConflictHandlers,
+  startSyncWatcher,
+  stopSyncWatcher
+} from './syncWatcher'
 import type { DataPayload } from '../shared/schema'
+import type { SyncConflictChoice } from '../shared/sync'
 
 const isDev = !app.isPackaged
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let reminderTimer: NodeJS.Timeout | null = null
+let hasUnsavedChanges = false
 
 function getWindow(): BrowserWindow | null {
   return mainWindow
@@ -123,6 +136,7 @@ if (!gotLock) {
     ipcMain.handle('data:load', () => loadData())
     ipcMain.handle('data:save', (_, data: DataPayload) => {
       saveData(data)
+      hasUnsavedChanges = false
       applySettings(data)
       updateTrayTooltip(data)
       return data
@@ -139,6 +153,29 @@ if (!gotLock) {
     })
 
     ipcMain.handle('data:export-report', () => buildExportReport(loadData()))
+
+    ipcMain.handle('data:export-csv', async () => {
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Экспорт CSV',
+        defaultPath: `tododesk-tasks-${new Date().toISOString().slice(0, 10)}.csv`,
+        filters: [{ name: 'CSV', extensions: ['csv'] }]
+      })
+      if (result.canceled || !result.filePath) return null
+      return exportCsvToFile(result.filePath)
+    })
+
+    ipcMain.handle('sync:set-unsaved', (_, value: boolean) => {
+      hasUnsavedChanges = value
+    })
+
+    ipcMain.handle('sync:resolve', (_, choice: SyncConflictChoice) => {
+      const data = resolveSyncConflict(choice)
+      if (data) {
+        applySettings(data)
+        broadcastData(data)
+      }
+      return data
+    })
 
     ipcMain.handle('data:pick-import', async () => {
       const result = await dialog.showOpenDialog(mainWindow!, {
@@ -173,7 +210,29 @@ if (!gotLock) {
     ipcMain.handle('updates:check', () => checkForUpdates())
     ipcMain.handle('updates:open', (_, url: string) => shell.openExternal(url))
 
+    ipcMain.handle('attachments:pick', async () => {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Прикрепить файл',
+        properties: ['openFile']
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      return copyAttachmentToStorage(result.filePaths[0])
+    })
+
+    ipcMain.handle('attachments:copy', (_, sourcePath: string, fileName?: string) =>
+      copyAttachmentToStorage(sourcePath, fileName)
+    )
+
+    ipcMain.handle('attachments:open', async (_, filePath: string) => {
+      await shell.openPath(getFullAttachmentPath(filePath))
+    })
+
+    ipcMain.handle('attachments:delete', (_, filePath: string) => {
+      deleteAttachmentFile(filePath)
+    })
+
     createWindow(startHidden)
+    setSyncConflictHandlers(getWindow, () => hasUnsavedChanges)
     createTray(getWindow, loadData, quitApp)
     registerHotkeys(getWindow)
 

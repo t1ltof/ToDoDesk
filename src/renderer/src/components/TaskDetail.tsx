@@ -1,6 +1,9 @@
-import { Archive, Bell, Pin, Plus, Trash2, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Archive, Bell, FolderKanban, Paperclip, Pin, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Priority, Recurrence } from '../../../shared/schema'
+import MarkdownContent from './MarkdownContent'
+import { addTaskAttachment, getTaskAttachments, removeTaskAttachment } from '../utils/attachmentHelpers'
+import { createProjectFromTaskBranch } from '../utils/projectBranchHelpers'
 import { createTemplate } from '../utils/templateHelpers'
 import {
   addChecklistItem,
@@ -14,6 +17,11 @@ import {
   updateTask
 } from '../utils/taskHelpers'
 import { getChildTasks, getTaskTags, sortProjects, useAppStore } from '../store/useAppStore'
+import {
+  getTaskDraft,
+  removeTaskDraft,
+  upsertTaskDraft
+} from '../utils/draftHelpers'
 import clsx from 'clsx'
 
 interface TaskDetailProps {
@@ -27,15 +35,28 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   const [newTagName, setNewTagName] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [descriptionMode, setDescriptionMode] = useState<'edit' | 'preview'>('edit')
+  const [dragOver, setDragOver] = useState(false)
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const task = data.tasks.find((item) => item.id === selectedTaskId)
+  const draft = task ? getTaskDraft(data, task.id) : null
 
   useEffect(() => {
     if (task) {
       setTitle(task.title)
       setDescription(task.description)
+      const existingDraft = getTaskDraft(data, task.id)
+      setShowDraftBanner(
+        Boolean(
+          existingDraft &&
+            (existingDraft.title !== task.title || existingDraft.description !== task.description) &&
+            existingDraft.updatedAt > task.updatedAt
+        )
+      )
     }
-  }, [task?.id, task?.title, task?.description])
+  }, [task?.id, task?.title, task?.description, task?.updatedAt, data.drafts])
   const projects = sortProjects(data.projects)
 
   const checklist = useMemo(
@@ -48,6 +69,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
 
   const children = task ? getChildTasks(data, task.id) : []
   const taskTagNames = task ? getTaskTags(data, task.id) : []
+  const attachments = task ? getTaskAttachments(data, task.id) : []
 
   const dependencyOptions = useMemo(
     () =>
@@ -56,6 +78,30 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       ),
     [data.tasks, selectedTaskId]
   )
+
+  useEffect(() => {
+    if (!task) return
+
+    const hasUnsaved = title.trim() !== task.title || description !== task.description
+    void window.tododesk.setUnsavedChanges(hasUnsaved)
+
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    if (!hasUnsaved) return
+
+    draftTimerRef.current = setTimeout(() => {
+      const current = useAppStore.getState().data
+      const currentTask = current.tasks.find((item) => item.id === task.id)
+      if (!currentTask) return
+      if (title.trim() === currentTask.title && description === currentTask.description) return
+      void persist(
+        upsertTaskDraft(current, task.id, title.trim() || currentTask.title, description)
+      )
+    }, 2000)
+
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    }
+  }, [task, title, description, persist])
 
   if (!task) return null
 
@@ -78,7 +124,26 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
     }>
   ): Promise<void> => {
     const current = useAppStore.getState().data
-    await save(updateTask(current, task.id, patch))
+    let next = updateTask(current, task.id, patch)
+    if (patch.title !== undefined || patch.description !== undefined) {
+      next = removeTaskDraft(next, task.id)
+      setShowDraftBanner(false)
+    }
+    await save(next)
+    void window.tododesk.setUnsavedChanges(false)
+  }
+
+  const restoreDraft = (): void => {
+    if (!draft) return
+    setTitle(draft.title)
+    setDescription(draft.description)
+    setShowDraftBanner(false)
+  }
+
+  const discardDraft = async (): Promise<void> => {
+    if (!task) return
+    await save(removeTaskDraft(data, task.id))
+    setShowDraftBanner(false)
   }
 
   const handleDelete = async (): Promise<void> => {
@@ -100,6 +165,17 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
     if (!text) return
     await save(addChecklistItem(data, task.id, text))
     setChecklistText('')
+  }
+
+  const handleAttachFile = async (sourcePath: string, fileName?: string): Promise<void> => {
+    const stored = await window.tododesk.copyAttachmentFile(sourcePath, fileName)
+    await save(addTaskAttachment(data, task.id, stored.fileName, stored.filePath))
+  }
+
+  const handlePickAttachment = async (): Promise<void> => {
+    const picked = await window.tododesk.pickAttachmentFile()
+    if (!picked) return
+    await save(addTaskAttachment(data, task.id, picked.fileName, picked.filePath))
   }
 
   const handleAddTag = async (): Promise<void> => {
@@ -136,6 +212,28 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
+        {showDraftBanner && draft && (
+          <div className="rounded-lg border border-amber-700/40 bg-amber-950/30 p-3 text-sm">
+            <p className="text-amber-200">Найден черновик от {new Date(draft.updatedAt).toLocaleString('ru-RU')}</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={restoreDraft}
+                className="rounded-lg bg-accent px-3 py-1.5 text-xs text-white"
+              >
+                Восстановить
+              </button>
+              <button
+                type="button"
+                onClick={() => void discardDraft()}
+                className="rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+              >
+                Отклонить
+              </button>
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="mb-1 block text-xs text-gray-500">Название</label>
           <input
@@ -149,17 +247,101 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-gray-500">Описание</label>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            onBlur={() => {
-              if (description !== task.description) void handleField({ description })
+          <div className="mb-1 flex items-center justify-between">
+            <label className="text-xs text-gray-500">Описание</label>
+            <button
+              type="button"
+              onClick={() =>
+                setDescriptionMode((mode) => (mode === 'edit' ? 'preview' : 'edit'))
+              }
+              className="text-xs text-blue-300 hover:underline"
+            >
+              {descriptionMode === 'edit' ? 'Просмотр' : 'Редактирование'}
+            </button>
+          </div>
+          {descriptionMode === 'edit' ? (
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              onBlur={() => {
+                if (description !== task.description) void handleField({ description })
+              }}
+              rows={4}
+              placeholder="Добавьте описание... Поддерживается **жирный**, *курсив*, `код`, списки"
+              className="w-full resize-none rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+          ) : (
+            <div className="min-h-[6rem] rounded-lg border border-surface-border bg-surface px-3 py-2">
+              {description.trim() ? (
+                <MarkdownContent text={description} />
+              ) : (
+                <p className="text-sm text-gray-500">Описание пустое</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Вложения</label>
+          <div
+            onDragOver={(event) => {
+              event.preventDefault()
+              setDragOver(true)
             }}
-            rows={4}
-            placeholder="Добавьте описание..."
-            className="w-full resize-none rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
-          />
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(event) => {
+              event.preventDefault()
+              setDragOver(false)
+              const files = Array.from(event.dataTransfer.files)
+              for (const file of files) {
+                const electronFile = file as File & { path?: string }
+                if (electronFile.path) {
+                  void handleAttachFile(electronFile.path, electronFile.name)
+                }
+              }
+            }}
+            className={clsx(
+              'rounded-lg border border-dashed px-3 py-4 transition',
+              dragOver
+                ? 'border-accent bg-accent-muted/30'
+                : 'border-surface-border bg-surface/40'
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => void handlePickAttachment()}
+              className="inline-flex items-center gap-2 rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
+            >
+              <Paperclip size={14} /> Прикрепить файл
+            </button>
+            <p className="mt-2 text-xs text-gray-500">Или перетащите файл сюда</p>
+          </div>
+
+          {attachments.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="flex items-center gap-2 rounded-lg border border-surface-border px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => void window.tododesk.openAttachmentPath(attachment.filePath)}
+                    className="flex-1 truncate text-left text-sm text-blue-300 hover:underline"
+                  >
+                    {attachment.fileName}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void save(removeTaskAttachment(data, attachment.id))}
+                    className="text-gray-500 hover:text-red-300"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -276,6 +458,8 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             <option value="daily">Ежедневно</option>
             <option value="weekly">Еженедельно</option>
             <option value="monthly">Ежемесячно</option>
+            <option value="weekdays">По будням</option>
+            <option value="weekends">По выходным</option>
           </select>
           {task.recurrenceExceptions.length > 0 && (
             <p className="mt-1 text-xs text-gray-500">
@@ -396,6 +580,23 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             </button>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={async () => {
+            const name = prompt('Название проекта', `${task.title}`)
+            if (!name?.trim()) return
+            const next = createProjectFromTaskBranch(data, task.id, name.trim())
+            const project = next.projects[next.projects.length - 1]
+            await save(next)
+            if (project) useAppStore.getState().setActiveView(`project:${project.id}`)
+          }}
+          className="w-full rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
+        >
+          <span className="inline-flex items-center gap-2">
+            <FolderKanban size={14} /> Создать проект из ветки
+          </span>
+        </button>
 
         <button
           type="button"
