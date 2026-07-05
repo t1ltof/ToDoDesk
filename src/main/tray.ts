@@ -1,6 +1,6 @@
-import { app, Menu, nativeImage, Tray, type BrowserWindow } from 'electron'
+import { app, Menu, Tray, type BrowserWindow } from 'electron'
 import type { DataPayload } from '../shared/schema'
-import { getTrayIconPath } from './resources'
+import { createTrayIconWithCount } from './trayBadge'
 
 let tray: Tray | null = null
 
@@ -15,18 +15,12 @@ export function countTodayTasks(data: DataPayload): number {
   ).length
 }
 
-function loadTrayIcon(): Electron.NativeImage {
-  const iconPath = getTrayIconPath()
-  const image = nativeImage.createFromPath(iconPath)
-  if (!image.isEmpty()) return image.resize({ width: 16, height: 16 })
-  return nativeImage.createEmpty()
-}
-
 export function updateTrayTooltip(data: DataPayload): void {
   if (!tray) return
   const count = countTodayTasks(data)
   const label = count > 0 ? `ToDoDesk — ${count} на сегодня` : 'ToDoDesk'
   tray.setToolTip(label)
+  tray.setImage(createTrayIconWithCount(count))
 }
 
 export function createTray(
@@ -34,8 +28,10 @@ export function createTray(
   getData: () => DataPayload,
   onQuit: () => void
 ): Tray {
-  tray = new Tray(loadTrayIcon())
-  updateTrayTooltip(getData())
+  const data = getData()
+  const count = countTodayTasks(data)
+  tray = new Tray(createTrayIconWithCount(count))
+  updateTrayTooltip(data)
 
   const showWindow = (): void => {
     const window = getWindow()
@@ -46,15 +42,9 @@ export function createTray(
   }
 
   const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Открыть ToDoDesk',
-      click: () => showWindow()
-    },
+    { label: 'Открыть ToDoDesk', click: () => showWindow() },
     { type: 'separator' },
-    {
-      label: 'Выход',
-      click: () => onQuit()
-    }
+    { label: 'Выход', click: () => onQuit() }
   ])
 
   tray.setContextMenu(contextMenu)

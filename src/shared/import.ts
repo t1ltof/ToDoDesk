@@ -5,4 +5,8 @@ export interface ImportPreview {
   taskCount: number
   doneCount: number
   tagCount: number
+  templateCount: number
+  valid: boolean
+  errors: string[]
+  warnings: string[]
 }

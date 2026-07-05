@@ -1,7 +1,14 @@
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import { useState, type DragEvent, type MouseEvent } from 'react'
 import type { Task, ViewId } from '../../../shared/schema'
-import { formatCompletedDate, getChildTasks, getTaskTags, useAppStore } from '../store/useAppStore'
+import { completeTask, reopenTask } from '../utils/recurrence'
+import {
+  formatCompletedDate,
+  formatDueDateLabel,
+  getChildTasks,
+  getTaskTags,
+  useAppStore
+} from '../store/useAppStore'
 import clsx from 'clsx'
 
 interface TaskItemProps {
@@ -32,24 +39,16 @@ export default function TaskItem({
 
   const toggleDone = async (event: MouseEvent): Promise<void> => {
     event.stopPropagation()
-    const now = new Date().toISOString()
-    const nextStatus = task.status === 'done' ? 'todo' : 'done'
-    const updatedTasks = data.tasks.map((item) =>
-      item.id === task.id
-        ? {
-            ...item,
-            status: nextStatus,
-            completedAt: nextStatus === 'done' ? now : null,
-            updatedAt: now
-          }
-        : item
-    )
-
-    await persist({ ...data, tasks: updatedTasks })
-    if (nextStatus === 'todo' && view === 'completed') {
-      setSelectedTaskId(null)
-    }
+    const current = useAppStore.getState().data
+    const next =
+      task.status === 'done'
+        ? reopenTask(current, task.id)
+        : completeTask(current, task.id)
+    await persist(next)
+    if (task.status === 'done' && view === 'completed') setSelectedTaskId(null)
   }
+
+  const dueLabel = formatDueDateLabel(task.dueDate)
 
   const handleDragStart = (event: DragEvent): void => {
     if (!draggable || depth > 0) return
@@ -142,7 +141,14 @@ export default function TaskItem({
             )}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2">
-            {task.dueDate && <p className="text-xs text-gray-400">Срок: {task.dueDate}</p>}
+            {dueLabel && (
+              <p className={clsx('text-xs', dueLabel === 'Просрочено' ? 'text-red-400' : 'text-gray-400')}>
+                {dueLabel}
+              </p>
+            )}
+            {task.recurrence !== 'none' && (
+              <span className="text-xs text-purple-400">↻ {task.recurrence}</span>
+            )}
             {completedLabel && (
               <p className="text-xs text-gray-500">Выполнено: {completedLabel}</p>
             )}

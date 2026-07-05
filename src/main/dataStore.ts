@@ -1,15 +1,19 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync, copyFileSync } from 'fs'
+import { join } from 'path'
 import { randomUUID } from 'crypto'
 import {
   createEmptyData,
   dataFileSchema,
+  migratePayload,
   type DataFile,
   type DataPayload,
   FORMAT_VERSION
 } from '../shared/schema'
 import { getBackupFilePath, getBackupsDirectory, getDataDirectory, getDataFilePath } from './paths'
+import { validateImportFile } from './importValidator'
+import type { ImportPreview } from '../shared/import'
 
-const APP_VERSION = '0.1.0'
+const APP_VERSION = '0.5.0'
 
 function ensureDataDirectory(): void {
   mkdirSync(getDataDirectory(), { recursive: true })
@@ -33,6 +37,8 @@ function writeAtomic(file: DataFile): void {
 
   if (existsSync(dataPath)) {
     writeFileSync(getBackupFilePath(), readFileSync(dataPath))
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    copyFileSync(dataPath, join(getBackupsDirectory(), `${stamp}.tododesk`))
   }
 
   writeFileSync(tempPath, JSON.stringify(file, null, 2), 'utf-8')
@@ -51,14 +57,24 @@ export function loadData(): DataPayload {
 
   try {
     const raw = JSON.parse(readFileSync(dataPath, 'utf-8'))
-    const parsed = dataFileSchema.parse(raw)
+    const parsed = dataFileSchema.parse({
+      ...raw,
+      data: migratePayload((raw as DataFile).data)
+    })
     return parsed.data
   } catch {
     const backupPath = getBackupFilePath()
     if (existsSync(backupPath)) {
-      const raw = JSON.parse(readFileSync(backupPath, 'utf-8'))
-      const parsed = dataFileSchema.parse(raw)
-      return parsed.data
+      try {
+        const raw = JSON.parse(readFileSync(backupPath, 'utf-8'))
+        const parsed = dataFileSchema.parse({
+          ...raw,
+          data: migratePayload((raw as DataFile).data)
+        })
+        return parsed.data
+      } catch {
+        // fall through
+      }
     }
 
     const empty = buildDataFile(createEmptyData())
@@ -77,30 +93,24 @@ export function exportToFile(targetPath: string): DataPayload {
   return data
 }
 
-import type { ImportPreview } from '../shared/import'
-
 export function peekImportFile(sourcePath: string): ImportPreview {
-  const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
-  const parsed = dataFileSchema.parse(raw)
-
-  return {
-    filePath: sourcePath,
-    exportedAt: parsed.exportedAt,
-    projectCount: parsed.data.projects.length,
-    taskCount: parsed.data.tasks.length,
-    doneCount: parsed.data.tasks.filter((task) => task.status === 'done').length,
-    tagCount: parsed.data.tags.length
-  }
+  return validateImportFile(sourcePath)
 }
 
 export function importFromPath(sourcePath: string, mode: 'replace' | 'new-project'): DataPayload {
+  const validation = validateImportFile(sourcePath)
+  if (!validation.valid) throw new Error(validation.errors.join('; '))
+
   if (mode === 'replace') return importReplace(sourcePath)
   return importAsNewProject(sourcePath)
 }
 
 export function importReplace(sourcePath: string): DataPayload {
   const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
-  const parsed = dataFileSchema.parse(raw)
+  const parsed = dataFileSchema.parse({
+    ...raw,
+    data: migratePayload((raw as DataFile).data)
+  })
   writeAtomic(parsed)
   return parsed.data
 }
@@ -108,7 +118,10 @@ export function importReplace(sourcePath: string): DataPayload {
 export function importAsNewProject(sourcePath: string): DataPayload {
   const current = loadData()
   const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
-  const parsed = dataFileSchema.parse(raw)
+  const parsed = dataFileSchema.parse({
+    ...raw,
+    data: migratePayload((raw as DataFile).data)
+  })
 
   const projectId = randomUUID()
   const now = new Date().toISOString()
@@ -119,6 +132,7 @@ export function importAsNewProject(sourcePath: string): DataPayload {
   for (const tag of parsed.data.tags) idMap.set(tag.id, randomUUID())
   for (const item of parsed.data.checklistItems) idMap.set(item.id, randomUUID())
   for (const item of parsed.data.reminders) idMap.set(item.id, randomUUID())
+  for (const tpl of parsed.data.templates) idMap.set(tpl.id, randomUUID())
 
   const newProject = {
     id: projectId,
@@ -159,13 +173,22 @@ export function importAsNewProject(sourcePath: string): DataPayload {
     tagId: idMap.get(link.tagId)!
   }))
 
+  const importedTemplates = parsed.data.templates.map((tpl) => ({
+    ...tpl,
+    id: idMap.get(tpl.id)!,
+    projectId: tpl.projectId ? projectId : null,
+    tagIds: tpl.tagIds.map((id) => idMap.get(id) ?? id)
+  }))
+
   const merged: DataPayload = {
     projects: [...current.projects, newProject],
     tags: [...current.tags, ...importedTags],
     tasks: [...current.tasks, ...importedTasks],
     taskTags: [...current.taskTags, ...importedTaskTags],
     checklistItems: [...current.checklistItems, ...importedChecklist],
-    reminders: [...current.reminders, ...importedReminders]
+    reminders: [...current.reminders, ...importedReminders],
+    templates: [...current.templates, ...importedTemplates],
+    settings: current.settings
   }
 
   saveData(merged)

@@ -44,10 +44,8 @@ export function collectDescendantIds(data: DataPayload, taskId: string): Set<str
 
 export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
   const ids = collectDescendantIds(data, taskId)
-
   return {
-    projects: data.projects,
-    tags: data.tags,
+    ...data,
     tasks: data.tasks.filter((task) => !ids.has(task.id)),
     taskTags: data.taskTags.filter((link) => !ids.has(link.taskId)),
     checklistItems: data.checklistItems.filter((item) => !ids.has(item.taskId)),
@@ -58,7 +56,9 @@ export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
 export function updateTask(
   data: DataPayload,
   taskId: string,
-  patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'dueDate' | 'projectId' | 'status'>>
+  patch: Partial<
+    Pick<Task, 'title' | 'description' | 'priority' | 'dueDate' | 'projectId' | 'status' | 'recurrence'>
+  >
 ): DataPayload {
   const updatedTasks = data.tasks.map((task) =>
     task.id === taskId
@@ -109,6 +109,7 @@ export function createSubtask(
     priority: parent.priority,
     dueDate: parent.dueDate,
     completedAt: null,
+    recurrence: 'none',
     sortOrder: data.tasks.filter((item) => item.parentId === parent.id).length,
     createdAt: now,
     updatedAt: now
@@ -138,6 +139,7 @@ export function createRootTask(
     priority: 'normal',
     dueDate: input.dueDate,
     completedAt: null,
+    recurrence: 'none',
     sortOrder: data.tasks.length,
     createdAt: now,
     updatedAt: now
@@ -207,8 +209,7 @@ export function clearCompletedTasks(data: DataPayload): DataPayload {
   const doneIds = new Set(data.tasks.filter((task) => task.status === 'done').map((task) => task.id))
 
   return {
-    projects: data.projects,
-    tags: data.tags,
+    ...data,
     tasks: data.tasks.filter((task) => !doneIds.has(task.id)),
     taskTags: data.taskTags.filter((link) => !doneIds.has(link.taskId)),
     checklistItems: data.checklistItems.filter((item) => !doneIds.has(item.taskId)),

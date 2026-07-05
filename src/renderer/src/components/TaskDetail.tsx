@@ -1,6 +1,7 @@
 import { Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { Priority } from '../../../shared/schema'
+import type { Priority, Recurrence } from '../../../shared/schema'
+import { createTemplate } from '../utils/templateHelpers'
 import {
   addChecklistItem,
   createSubtask,
@@ -14,7 +15,11 @@ import {
 import { getChildTasks, getTaskTags, sortProjects, useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
-export default function TaskDetail(): JSX.Element | null {
+interface TaskDetailProps {
+  onSaveAsTemplate: () => void
+}
+
+export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.Element | null {
   const { data, selectedTaskId, setSelectedTaskId, persist } = useAppStore()
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [checklistText, setChecklistText] = useState('')
@@ -171,6 +176,22 @@ export default function TaskDetail(): JSX.Element | null {
         </div>
 
         <div>
+          <label className="mb-1 block text-xs text-gray-500">Повторение</label>
+          <select
+            value={task.recurrence}
+            onChange={(event) =>
+              void handleField({ recurrence: event.target.value as Recurrence })
+            }
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+          >
+            <option value="none">Не повторять</option>
+            <option value="daily">Ежедневно</option>
+            <option value="weekly">Еженедельно</option>
+            <option value="monthly">Ежемесячно</option>
+          </select>
+        </div>
+
+        <div>
           <label className="mb-1 block text-xs text-gray-500">Проект</label>
           <select
             value={task.projectId ?? ''}
@@ -282,6 +303,33 @@ export default function TaskDetail(): JSX.Element | null {
             </button>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={async () => {
+            const name = prompt('Название шаблона', task.title)
+            if (!name?.trim()) return
+            const tagIds = data.taskTags
+              .filter((l) => l.taskId === task.id)
+              .map((l) => l.tagId)
+            const checklistTexts = checklist.map((c) => c.text)
+            await save(
+              createTemplate(data, {
+                name: name.trim(),
+                title: task.title,
+                description: task.description,
+                priority: task.priority,
+                projectId: task.projectId,
+                tagIds,
+                checklistTexts
+              })
+            )
+            onSaveAsTemplate()
+          }}
+          className="w-full rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
+        >
+          Сохранить как шаблон
+        </button>
 
         <div>
           <label className="mb-2 block text-xs text-gray-500">Подзадачи</label>
