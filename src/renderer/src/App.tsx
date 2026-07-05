@@ -1,19 +1,28 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import QuickAddDialog from './components/QuickAddDialog'
 import Sidebar from './components/Sidebar'
 import TaskPanel from './components/TaskPanel'
 import { useAppStore } from './store/useAppStore'
 
 export default function App(): JSX.Element {
   const { loading, load, setData } = useAppStore()
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
 
   useEffect(() => {
     void load()
 
-    const unsubscribe = window.tododesk.onDataUpdated((data) => {
+    const unsubData = window.tododesk.onDataUpdated((data) => {
       setData(data)
     })
 
-    return unsubscribe
+    const unsubQuickAdd = window.tododesk.onQuickAdd(() => {
+      setQuickAddOpen(true)
+    })
+
+    return () => {
+      unsubData()
+      unsubQuickAdd()
+    }
   }, [load, setData])
 
   if (loading) {
@@ -28,6 +37,7 @@ export default function App(): JSX.Element {
     <div className="flex min-h-screen">
       <Sidebar />
       <TaskPanel />
+      <QuickAddDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </div>
   )
 }

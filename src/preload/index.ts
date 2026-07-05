@@ -9,6 +9,7 @@ export interface ToDoDeskApi {
   pickImportFile: () => Promise<ImportPreview | null>
   importFile: (filePath: string, mode: 'replace' | 'new-project') => Promise<DataPayload>
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void
+  onQuickAdd: (callback: () => void) => () => void
 }
 
 const api: ToDoDeskApi = {
@@ -21,6 +22,11 @@ const api: ToDoDeskApi = {
     const listener = (_: Electron.IpcRendererEvent, data: DataPayload): void => callback(data)
     ipcRenderer.on('data:updated', listener)
     return () => ipcRenderer.removeListener('data:updated', listener)
+  },
+  onQuickAdd: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on('app:quick-add', listener)
+    return () => ipcRenderer.removeListener('app:quick-add', listener)
   }
 }
 

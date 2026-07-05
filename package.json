@@ -1,6 +1,6 @@
 {
   "name": "tododesk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Десктопный планировщик рабочих задач для личного использования",
   "main": "./out/main/index.js",
   "author": "t1ltof",
@@ -39,16 +39,25 @@
     "appId": "com.t1ltof.tododesk",
     "productName": "ToDoDesk",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "resources"
     },
     "files": [
       "out/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": [
         "portable"
-      ]
+      ],
+      "icon": "resources/icon.ico"
     },
     "portable": {
       "artifactName": "ToDoDesk-${version}-portable.exe"
