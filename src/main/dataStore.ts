@@ -77,6 +77,27 @@ export function exportToFile(targetPath: string): DataPayload {
   return data
 }
 
+import type { ImportPreview } from '../shared/import'
+
+export function peekImportFile(sourcePath: string): ImportPreview {
+  const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
+  const parsed = dataFileSchema.parse(raw)
+
+  return {
+    filePath: sourcePath,
+    exportedAt: parsed.exportedAt,
+    projectCount: parsed.data.projects.length,
+    taskCount: parsed.data.tasks.length,
+    doneCount: parsed.data.tasks.filter((task) => task.status === 'done').length,
+    tagCount: parsed.data.tags.length
+  }
+}
+
+export function importFromPath(sourcePath: string, mode: 'replace' | 'new-project'): DataPayload {
+  if (mode === 'replace') return importReplace(sourcePath)
+  return importAsNewProject(sourcePath)
+}
+
 export function importReplace(sourcePath: string): DataPayload {
   const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
   const parsed = dataFileSchema.parse(raw)

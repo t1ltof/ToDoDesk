@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import type { Task } from '../../../shared/schema'
-import { getChildTasks, useAppStore } from '../store/useAppStore'
+import { getChildTasks, getTaskTags, useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
 interface TaskItemProps {
@@ -10,11 +10,14 @@ interface TaskItemProps {
 }
 
 export default function TaskItem({ task, depth = 0 }: TaskItemProps): JSX.Element {
-  const { data, persist } = useAppStore()
+  const { data, persist, selectedTaskId, setSelectedTaskId } = useAppStore()
   const children = getChildTasks(data, task.id)
   const [expanded, setExpanded] = useState(true)
+  const tags = getTaskTags(data, task.id)
+  const selected = selectedTaskId === task.id
 
-  const toggleDone = async (): Promise<void> => {
+  const toggleDone = async (event: MouseEvent): Promise<void> => {
+    event.stopPropagation()
     const now = new Date().toISOString()
     const nextStatus = task.status === 'done' ? 'todo' : 'done'
     const updatedTasks = data.tasks.map((item) =>
@@ -34,13 +37,27 @@ export default function TaskItem({ task, depth = 0 }: TaskItemProps): JSX.Elemen
   return (
     <div>
       <div
-        className="flex items-start gap-2 rounded-lg border border-surface-border bg-surface-elevated px-3 py-2"
+        role="button"
+        tabIndex={0}
+        onClick={() => setSelectedTaskId(task.id)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') setSelectedTaskId(task.id)
+        }}
+        className={clsx(
+          'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition',
+          selected
+            ? 'border-accent bg-accent-muted/40'
+            : 'border-surface-border bg-surface-elevated hover:border-gray-600'
+        )}
         style={{ marginLeft: depth * 20 }}
       >
         {children.length > 0 ? (
           <button
             type="button"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={(event) => {
+              event.stopPropagation()
+              setExpanded((value) => !value)
+            }}
             className="mt-0.5 text-gray-400 hover:text-gray-200"
           >
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -52,7 +69,8 @@ export default function TaskItem({ task, depth = 0 }: TaskItemProps): JSX.Elemen
         <input
           type="checkbox"
           checked={task.status === 'done'}
-          onChange={() => void toggleDone()}
+          onClick={(event) => void toggleDone(event)}
+          onChange={() => undefined}
           className="mt-1"
         />
 
@@ -71,10 +89,18 @@ export default function TaskItem({ task, depth = 0 }: TaskItemProps): JSX.Elemen
                 Важно
               </span>
             )}
+            {children.length > 0 && (
+              <span className="text-xs text-gray-500">{children.length} подз.</span>
+            )}
           </div>
-          {task.dueDate && (
-            <p className="text-xs text-gray-400">Срок: {task.dueDate}</p>
-          )}
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            {task.dueDate && <p className="text-xs text-gray-400">Срок: {task.dueDate}</p>}
+            {tags.map((tag) => (
+              <span key={tag} className="text-xs text-blue-400/80">
+                #{tag}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 

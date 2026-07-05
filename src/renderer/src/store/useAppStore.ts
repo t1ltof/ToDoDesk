@@ -5,15 +5,17 @@ interface AppState {
   data: DataPayload
   activeView: ViewId
   searchQuery: string
+  selectedTaskId: string | null
   loading: boolean
   setActiveView: (view: ViewId) => void
   setSearchQuery: (query: string) => void
+  setSelectedTaskId: (taskId: string | null) => void
   setData: (data: DataPayload) => void
   load: () => Promise<void>
   persist: (data: DataPayload) => Promise<void>
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   data: {
     projects: [],
     tags: [],
@@ -24,10 +26,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   activeView: 'today',
   searchQuery: '',
+  selectedTaskId: null,
   loading: true,
 
-  setActiveView: (view) => set({ activeView: view }),
+  setActiveView: (view) => set({ activeView: view, selectedTaskId: null }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setSelectedTaskId: (taskId) => set({ selectedTaskId: taskId }),
   setData: (data) => set({ data }),
 
   load: async () => {
@@ -52,8 +56,11 @@ export function filterTasksForView(
 ): Task[] {
   const query = searchQuery.trim().toLowerCase()
   let tasks = data.tasks.filter((task) => {
-    if (query && !task.title.toLowerCase().includes(query)) return false
-    return true
+    if (!query) return true
+    return (
+      task.title.toLowerCase().includes(query) ||
+      task.description.toLowerCase().includes(query)
+    )
   })
 
   if (view === 'today') {
@@ -82,6 +89,13 @@ export function getChildTasks(data: DataPayload, parentId: string): Task[] {
   return data.tasks
     .filter((task) => task.parentId === parentId)
     .sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+export function getTaskTags(data: DataPayload, taskId: string): string[] {
+  return data.taskTags
+    .filter((link) => link.taskId === taskId)
+    .map((link) => data.tags.find((tag) => tag.id === link.tagId)?.name)
+    .filter((name): name is string => Boolean(name))
 }
 
 export function sortProjects(projects: Project[]): Project[] {

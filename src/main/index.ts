@@ -2,9 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import {
   exportToFile,
-  importAsNewProject,
-  importReplace,
+  importFromPath,
   loadData,
+  peekImportFile,
   saveData
 } from './dataStore'
 import { checkDueTasks, scheduleDailyReminder } from './notifications'
@@ -16,9 +16,9 @@ let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 900,
+    width: 1280,
+    height: 800,
+    minWidth: 1024,
     minHeight: 600,
     show: false,
     backgroundColor: '#1a1d23',
@@ -82,33 +82,19 @@ if (!gotLock) {
       return exportToFile(result.filePath)
     })
 
-    ipcMain.handle('data:import', async (_, mode: 'replace' | 'new-project') => {
+    ipcMain.handle('data:pick-import', async () => {
       const result = await dialog.showOpenDialog(mainWindow!, {
-        title: 'Импорт данных',
+        title: 'Выберите файл для импорта',
         filters: [{ name: 'ToDoDesk', extensions: ['tododesk'] }],
         properties: ['openFile']
       })
 
       if (result.canceled || result.filePaths.length === 0) return null
+      return peekImportFile(result.filePaths[0])
+    })
 
-      if (mode === 'replace') {
-        const confirmed = await dialog.showMessageBox(mainWindow!, {
-          type: 'warning',
-          buttons: ['Отмена', 'Заменить все'],
-          defaultId: 0,
-          cancelId: 0,
-          title: 'Импорт данных',
-          message: 'Заменить все текущие данные?',
-          detail: 'Текущие задачи будут удалены и заменены содержимым файла.'
-        })
-
-        if (confirmed.response !== 1) return null
-        const data = importReplace(result.filePaths[0])
-        broadcastData(data)
-        return data
-      }
-
-      const data = importAsNewProject(result.filePaths[0])
+    ipcMain.handle('data:import-file', (_, filePath: string, mode: 'replace' | 'new-project') => {
+      const data = importFromPath(filePath, mode)
       broadcastData(data)
       return data
     })
