@@ -1,21 +1,35 @@
-import { CalendarDays, Download, FolderKanban, Inbox, ListTodo, Tag, Upload } from 'lucide-react'
+import {
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  FolderKanban,
+  Inbox,
+  ListTodo,
+  Pencil,
+  Tag,
+  Upload
+} from 'lucide-react'
 import { useState } from 'react'
 import type { ImportPreview } from '../../../shared/import'
-import type { ViewId } from '../../../shared/schema'
-import { sortProjects, useAppStore } from '../store/useAppStore'
+import type { Project, ViewId } from '../../../shared/schema'
+import { countCompletedTasks, sortProjects, useAppStore } from '../store/useAppStore'
 import ImportDialog from './ImportDialog'
+import ProjectDialog from './ProjectDialog'
 import clsx from 'clsx'
 
 const mainViews: Array<{ id: ViewId; label: string; icon: typeof Inbox }> = [
   { id: 'today', label: 'Сегодня', icon: CalendarDays },
   { id: 'inbox', label: 'Входящие', icon: Inbox },
-  { id: 'all', label: 'Все задачи', icon: ListTodo }
+  { id: 'all', label: 'Все задачи', icon: ListTodo },
+  { id: 'completed', label: 'Выполненные', icon: CheckCircle2 }
 ]
 
 export default function Sidebar(): JSX.Element {
   const { data, activeView, setActiveView } = useAppStore()
   const projects = sortProjects(data.projects)
+  const completedCount = countCompletedTasks(data)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
 
   const handleExport = async (): Promise<void> => {
     await window.tododesk.exportData()
@@ -48,7 +62,12 @@ export default function Sidebar(): JSX.Element {
               )}
             >
               <Icon size={16} />
-              {label}
+              <span className="flex-1 text-left">{label}</span>
+              {id === 'completed' && completedCount > 0 && (
+                <span className="rounded-full bg-surface-border px-2 py-0.5 text-xs text-gray-400">
+                  {completedCount}
+                </span>
+              )}
             </button>
           ))}
 
@@ -62,24 +81,33 @@ export default function Sidebar(): JSX.Element {
             projects.map((project) => {
               const viewId: ViewId = `project:${project.id}`
               return (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => setActiveView(viewId)}
-                  className={clsx(
-                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition',
-                    activeView === viewId
-                      ? 'bg-accent-muted text-blue-300'
-                      : 'text-gray-300 hover:bg-surface-border/60'
-                  )}
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: project.color }}
-                  />
-                  <FolderKanban size={16} />
-                  <span className="truncate">{project.name}</span>
-                </button>
+                <div key={project.id} className="group flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveView(viewId)}
+                    className={clsx(
+                      'flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition',
+                      activeView === viewId
+                        ? 'bg-accent-muted text-blue-300'
+                        : 'text-gray-300 hover:bg-surface-border/60'
+                    )}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    <FolderKanban size={16} />
+                    <span className="truncate">{project.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingProject(project)}
+                    className="rounded p-1.5 text-gray-500 opacity-0 transition hover:bg-surface-border/60 hover:text-gray-300 group-hover:opacity-100"
+                    title="Редактировать проект"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </div>
               )
             })
           )}
@@ -124,6 +152,10 @@ export default function Sidebar(): JSX.Element {
 
       {importPreview && (
         <ImportDialog preview={importPreview} onClose={() => setImportPreview(null)} />
+      )}
+
+      {editingProject && (
+        <ProjectDialog project={editingProject} onClose={() => setEditingProject(null)} />
       )}
     </>
   )

@@ -202,3 +202,27 @@ export function removeChecklistItem(data: DataPayload, itemId: string): DataPayl
 export function setTaskPriority(data: DataPayload, taskId: string, priority: Priority): DataPayload {
   return updateTask(data, taskId, { priority })
 }
+
+export function clearCompletedTasks(data: DataPayload): DataPayload {
+  const doneIds = new Set(data.tasks.filter((task) => task.status === 'done').map((task) => task.id))
+
+  return {
+    projects: data.projects,
+    tags: data.tags,
+    tasks: data.tasks.filter((task) => !doneIds.has(task.id)),
+    taskTags: data.taskTags.filter((link) => !doneIds.has(link.taskId)),
+    checklistItems: data.checklistItems.filter((item) => !doneIds.has(item.taskId)),
+    reminders: data.reminders.filter((item) => !doneIds.has(item.taskId))
+  }
+}
+
+export function reorderTasks(data: DataPayload, orderedIds: string[]): DataPayload {
+  const orderMap = new Map(orderedIds.map((id, index) => [id, index]))
+
+  return {
+    ...data,
+    tasks: data.tasks.map((task) =>
+      orderMap.has(task.id) ? { ...task, sortOrder: orderMap.get(task.id)! } : task
+    )
+  }
+}

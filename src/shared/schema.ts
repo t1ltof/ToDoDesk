@@ -80,7 +80,7 @@ export type Reminder = z.infer<typeof reminderSchema>
 export type DataPayload = z.infer<typeof dataPayloadSchema>
 export type DataFile = z.infer<typeof dataFileSchema>
 
-export type ViewId = 'today' | 'inbox' | 'all' | `project:${string}`
+export type ViewId = 'today' | 'inbox' | 'all' | 'completed' | `project:${string}`
 
 export function createEmptyData(): DataPayload {
   return {

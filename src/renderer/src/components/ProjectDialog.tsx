@@ -1,45 +1,69 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import type { Project } from '../../../shared/schema'
+import { deleteProject, updateProject } from '../utils/projectHelpers'
 import { useAppStore } from '../store/useAppStore'
 
 const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
 
 interface ProjectDialogProps {
   onClose: () => void
+  project?: Project
 }
 
-export default function ProjectDialog({ onClose }: ProjectDialogProps): JSX.Element {
-  const { data, persist, setActiveView } = useAppStore()
-  const [name, setName] = useState('')
-  const [color, setColor] = useState(COLORS[0])
+export default function ProjectDialog({ onClose, project }: ProjectDialogProps): JSX.Element {
+  const { data, persist, setActiveView, activeView } = useAppStore()
+  const isEdit = Boolean(project)
+  const [name, setName] = useState(project?.name ?? '')
+  const [color, setColor] = useState(project?.color ?? COLORS[0])
 
-  const handleCreate = async (): Promise<void> => {
+  useEffect(() => {
+    if (project) {
+      setName(project.name)
+      setColor(project.color)
+    }
+  }, [project])
+
+  const handleSave = async (): Promise<void> => {
     const trimmed = name.trim()
     if (!trimmed) return
 
-    const project = {
-      id: uuidv4(),
-      name: trimmed,
-      color,
-      sortOrder: data.projects.length,
-      archived: false
+    if (isEdit && project) {
+      await persist(updateProject(data, project.id, { name: trimmed, color }))
+    } else {
+      const created = {
+        id: uuidv4(),
+        name: trimmed,
+        color,
+        sortOrder: data.projects.length,
+        archived: false
+      }
+      await persist({ ...data, projects: [...data.projects, created] })
+      setActiveView(`project:${created.id}`)
     }
 
-    await persist({ ...data, projects: [...data.projects, project] })
-    setActiveView(`project:${project.id}`)
+    onClose()
+  }
+
+  const handleDelete = async (): Promise<void> => {
+    if (!project) return
+    if (!confirm(`Удалить проект «${project.name}»? Задачи переместятся во Входящие.`)) return
+
+    await persist(deleteProject(data, project.id))
+    if (activeView === `project:${project.id}`) setActiveView('inbox')
     onClose()
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-xl border border-surface-border bg-surface-elevated p-6 shadow-xl">
-        <h3 className="text-lg font-semibold">Новый проект</h3>
+        <h3 className="text-lg font-semibold">{isEdit ? 'Редактировать проект' : 'Новый проект'}</h3>
 
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') void handleCreate()
+            if (event.key === 'Enter') void handleSave()
           }}
           placeholder="Название проекта"
           autoFocus
@@ -61,21 +85,34 @@ export default function ProjectDialog({ onClose }: ProjectDialogProps): JSX.Elem
           ))}
         </div>
 
-        <div className="mt-6 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-surface-border px-4 py-2 text-sm text-gray-300"
-          >
-            Отмена
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
-          >
-            Создать
-          </button>
+        <div className="mt-6 flex justify-between gap-2">
+          {isEdit ? (
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              className="rounded-lg border border-red-800/60 px-4 py-2 text-sm text-red-300 hover:bg-red-950/40"
+            >
+              Удалить
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-surface-border px-4 py-2 text-sm text-gray-300"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+            >
+              {isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
