@@ -40,6 +40,15 @@ npm install
 npm run dev
 ```
 
+**Важно:** перед `npm run dev` закройте portable-версию (`ToDoDesk.exe` из `release/`).  
+Иначе откроется старая сборка из трея. Для чистого запуска:
+
+```bash
+npm run dev:clean
+```
+
+Окно разработки имеет заголовок **«ToDoDesk — Разработка»**.
+
 ## Сборка portable
 
 ```bash

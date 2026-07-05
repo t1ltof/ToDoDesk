@@ -39,6 +39,7 @@ function createWindow(startHidden = false): void {
     minWidth: 1024,
     minHeight: 600,
     show: false,
+    title: isDev ? 'ToDoDesk — Разработка' : 'ToDoDesk',
     backgroundColor: '#1a1d23',
     autoHideMenuBar: true,
     icon: getIconPath(),
