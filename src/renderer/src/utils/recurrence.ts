@@ -2,12 +2,29 @@ import { v4 as uuidv4 } from 'uuid'
 import type { DataPayload, Recurrence, Task } from '../../../shared/schema'
 import { syncReminder } from './taskHelpers'
 
-export function nextDueDate(dueDate: string, recurrence: Recurrence): string {
+function advanceDueDate(dueDate: string, recurrence: Recurrence): string {
   const date = new Date(`${dueDate}T12:00:00`)
   if (recurrence === 'daily') date.setDate(date.getDate() + 1)
   if (recurrence === 'weekly') date.setDate(date.getDate() + 7)
   if (recurrence === 'monthly') date.setMonth(date.getMonth() + 1)
   return date.toISOString().slice(0, 10)
+}
+
+export function nextDueDate(
+  dueDate: string,
+  recurrence: Recurrence,
+  recurrenceExceptions: string[] = []
+): string {
+  const exceptions = new Set(recurrenceExceptions)
+  let next = advanceDueDate(dueDate, recurrence)
+  let guard = 0
+
+  while (exceptions.has(next) && guard < 366) {
+    next = advanceDueDate(next, recurrence)
+    guard += 1
+  }
+
+  return next
 }
 
 export function completeTask(data: DataPayload, taskId: string): DataPayload {
@@ -24,7 +41,7 @@ export function completeTask(data: DataPayload, taskId: string): DataPayload {
   let next: DataPayload = { ...data, tasks: updatedTasks }
 
   if (task.recurrence !== 'none' && task.dueDate) {
-    const newDue = nextDueDate(task.dueDate, task.recurrence)
+    const newDue = nextDueDate(task.dueDate, task.recurrence, task.recurrenceExceptions)
     const newTask: Task = {
       id: uuidv4(),
       projectId: task.projectId,
@@ -34,8 +51,14 @@ export function completeTask(data: DataPayload, taskId: string): DataPayload {
       status: 'todo',
       priority: task.priority,
       dueDate: newDue,
+      dueTime: task.dueTime,
+      timeOfDay: task.timeOfDay,
       completedAt: null,
       recurrence: task.recurrence,
+      recurrenceExceptions: task.recurrenceExceptions,
+      dependsOnTaskId: task.dependsOnTaskId,
+      pinned: task.pinned,
+      archived: false,
       sortOrder: data.tasks.length,
       createdAt: now,
       updatedAt: now

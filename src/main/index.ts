@@ -2,17 +2,21 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import { applyAutostart } from './autostart'
 import {
+  buildExportReport,
   exportToFile,
   importFromPath,
   loadData,
   peekImportFile,
-  saveData
+  saveData,
+  type ImportMode
 } from './dataStore'
+import { setDataPassword } from './encryption'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { checkDueTasks, scheduleReminders } from './notifications'
 import { getIconPath } from './resources'
 import { createTray, destroyTray, updateTrayTooltip } from './tray'
 import { checkForUpdates } from './updates'
+import { startSyncWatcher, stopSyncWatcher } from './syncWatcher'
 import type { DataPayload } from '../shared/schema'
 
 const isDev = !app.isPackaged
@@ -81,10 +85,15 @@ function broadcastData(data: DataPayload): void {
 
 function applySettings(data: DataPayload): void {
   applyAutostart(data.settings)
+  startSyncWatcher(data.settings.syncFolderPath, (synced) => {
+    applySettings(synced)
+    broadcastData(synced)
+  })
 }
 
 function quitApp(): void {
   isQuitting = true
+  stopSyncWatcher()
   unregisterHotkeys()
   destroyTray()
   if (reminderTimer) clearInterval(reminderTimer)
@@ -119,15 +128,17 @@ if (!gotLock) {
       return data
     })
 
-    ipcMain.handle('data:export', async () => {
+    ipcMain.handle('data:export', async (_, mergeWithCurrent?: boolean) => {
       const result = await dialog.showSaveDialog(mainWindow!, {
         title: 'Экспорт данных',
         defaultPath: `tododesk-${new Date().toISOString().slice(0, 10)}.tododesk`,
         filters: [{ name: 'ToDoDesk', extensions: ['tododesk'] }]
       })
       if (result.canceled || !result.filePath) return null
-      return exportToFile(result.filePath)
+      return exportToFile(result.filePath, mergeWithCurrent ?? false)
     })
+
+    ipcMain.handle('data:export-report', () => buildExportReport(loadData()))
 
     ipcMain.handle('data:pick-import', async () => {
       const result = await dialog.showOpenDialog(mainWindow!, {
@@ -139,7 +150,7 @@ if (!gotLock) {
       return peekImportFile(result.filePaths[0])
     })
 
-    ipcMain.handle('data:import-file', (_, filePath: string, mode: 'replace' | 'new-project') => {
+    ipcMain.handle('data:import-file', (_, filePath: string, mode: ImportMode) => {
       try {
         const data = importFromPath(filePath, mode)
         applySettings(data)
@@ -151,6 +162,11 @@ if (!gotLock) {
           error: error instanceof Error ? error.message : 'Ошибка импорта'
         }
       }
+    })
+
+    ipcMain.handle('security:set-password', (_, password: string | null) => {
+      setDataPassword(password)
+      return true
     })
 
     ipcMain.handle('app:show', () => showMainWindow())
@@ -171,5 +187,8 @@ if (!gotLock) {
     app.on('activate', () => showMainWindow())
   })
 
-  app.on('will-quit', () => unregisterHotkeys())
+  app.on('will-quit', () => {
+    stopSyncWatcher()
+    unregisterHotkeys()
+  })
 }

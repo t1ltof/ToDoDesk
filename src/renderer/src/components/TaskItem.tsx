@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, Lock, Pin } from 'lucide-react'
 import { useState, type DragEvent, type MouseEvent } from 'react'
 import type { Task, ViewId } from '../../../shared/schema'
 import { completeTask, reopenTask } from '../utils/recurrence'
+import { canCompleteTask, isTaskBlocked } from '../utils/taskFilters'
 import {
   formatCompletedDate,
   formatDueDateLabel,
@@ -16,6 +17,9 @@ interface TaskItemProps {
   depth?: number
   view: ViewId
   draggable?: boolean
+  bulkMode?: boolean
+  bulkSelected?: boolean
+  onBulkToggle?: (taskId: string) => void
   onDragStart?: (taskId: string) => void
   onDrop?: (targetId: string) => void
 }
@@ -25,6 +29,9 @@ export default function TaskItem({
   depth = 0,
   view,
   draggable = false,
+  bulkMode = false,
+  bulkSelected = false,
+  onBulkToggle,
   onDragStart,
   onDrop
 }: TaskItemProps): JSX.Element {
@@ -36,9 +43,13 @@ export default function TaskItem({
   const tags = getTaskTags(data, task.id)
   const selected = selectedTaskId === task.id
   const completedLabel = formatCompletedDate(task.completedAt)
+  const blocked = isTaskBlocked(data, task.id)
+  const completable = canCompleteTask(data, task.id)
 
   const toggleDone = async (event: MouseEvent): Promise<void> => {
     event.stopPropagation()
+    if (task.status !== 'done' && !completable) return
+
     const current = useAppStore.getState().data
     const next =
       task.status === 'done'
@@ -94,6 +105,15 @@ export default function TaskItem({
         style={{ marginLeft: depth * 20 }}
       >
         <div className="flex shrink-0 items-center gap-0.5">
+          {bulkMode && depth === 0 && (
+            <input
+              type="checkbox"
+              checked={bulkSelected}
+              onClick={(event) => event.stopPropagation()}
+              onChange={() => onBulkToggle?.(task.id)}
+              className="mt-0.5"
+            />
+          )}
           {draggable && depth === 0 && (
             <GripVertical size={16} className="mt-0.5 text-gray-500" />
           )}
@@ -116,13 +136,21 @@ export default function TaskItem({
         <input
           type="checkbox"
           checked={task.status === 'done'}
+          disabled={task.status !== 'done' && !completable}
           onClick={(event) => void toggleDone(event)}
           onChange={() => undefined}
           className="mt-1"
+          title={blocked ? 'Задача заблокирована зависимостью' : undefined}
         />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {task.pinned && <Pin size={14} className="shrink-0 text-amber-400" />}
+            {blocked && task.status === 'todo' && (
+              <span title="Заблокировано зависимостью">
+                <Lock size={14} className="shrink-0 text-orange-400" />
+              </span>
+            )}
             <span
               className={clsx(
                 'truncate text-sm',
@@ -144,6 +172,7 @@ export default function TaskItem({
             {dueLabel && (
               <p className={clsx('text-xs', dueLabel === 'Просрочено' ? 'text-red-400' : 'text-gray-400')}>
                 {dueLabel}
+                {task.dueTime ? ` · ${task.dueTime}` : ''}
               </p>
             )}
             {task.recurrence !== 'none' && (

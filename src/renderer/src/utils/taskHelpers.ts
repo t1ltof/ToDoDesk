@@ -5,6 +5,15 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+const defaultTaskFields = {
+  dueTime: null,
+  timeOfDay: null,
+  recurrenceExceptions: [] as string[],
+  dependsOnTaskId: null,
+  pinned: false,
+  archived: false
+} as const
+
 function reminderForDueDate(dueDate: string): string {
   return new Date(`${dueDate}T09:00:00`).toISOString()
 }
@@ -57,7 +66,21 @@ export function updateTask(
   data: DataPayload,
   taskId: string,
   patch: Partial<
-    Pick<Task, 'title' | 'description' | 'priority' | 'dueDate' | 'projectId' | 'status' | 'recurrence'>
+    Pick<
+      Task,
+      | 'title'
+      | 'description'
+      | 'priority'
+      | 'dueDate'
+      | 'dueTime'
+      | 'timeOfDay'
+      | 'projectId'
+      | 'status'
+      | 'recurrence'
+      | 'dependsOnTaskId'
+      | 'pinned'
+      | 'archived'
+    >
   >
 ): DataPayload {
   const updatedTasks = data.tasks.map((task) =>
@@ -112,7 +135,8 @@ export function createSubtask(
     recurrence: 'none',
     sortOrder: data.tasks.filter((item) => item.parentId === parent.id).length,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    ...defaultTaskFields
   }
 
   let next: DataPayload = { ...data, tasks: [...data.tasks, task] }
@@ -142,7 +166,8 @@ export function createRootTask(
     recurrence: 'none',
     sortOrder: data.tasks.length,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    ...defaultTaskFields
   }
 
   let next: DataPayload = { ...data, tasks: [...data.tasks, task] }
@@ -225,5 +250,14 @@ export function reorderTasks(data: DataPayload, orderedIds: string[]): DataPaylo
     tasks: data.tasks.map((task) =>
       orderMap.has(task.id) ? { ...task, sortOrder: orderMap.get(task.id)! } : task
     )
+  }
+}
+
+export function addReminderInHours(data: DataPayload, taskId: string, hours: number): DataPayload {
+  const remindAt = new Date(Date.now() + hours * 3_600_000).toISOString()
+
+  return {
+    ...data,
+    reminders: [...data.reminders, { id: uuidv4(), taskId, remindAt }]
   }
 }

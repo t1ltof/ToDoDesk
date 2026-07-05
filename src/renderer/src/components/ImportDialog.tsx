@@ -9,7 +9,7 @@ interface ImportDialogProps {
   onClose: () => void
 }
 
-type ImportMode = 'replace' | 'new-project'
+type ImportMode = 'replace' | 'new-project' | 'merge'
 
 export default function ImportDialog({ preview, onClose }: ImportDialogProps): JSX.Element {
   const { load, setActiveView } = useAppStore()
@@ -97,6 +97,26 @@ export default function ImportDialog({ preview, onClose }: ImportDialogProps): J
               <div>
                 <p className="text-sm font-medium">Импортировать как новый проект</p>
                 <p className="text-xs text-gray-400">Текущие данные сохранятся</p>
+              </div>
+            </label>
+            <label
+              className={clsx(
+                'flex cursor-pointer gap-3 rounded-lg border p-3 transition',
+                mode === 'merge' ? 'border-accent bg-accent-muted' : 'border-surface-border'
+              )}
+            >
+              <input
+                type="radio"
+                name="import-mode"
+                checked={mode === 'merge'}
+                onChange={() => setMode('merge')}
+                className="mt-1"
+              />
+              <div>
+                <p className="text-sm font-medium">Объединить</p>
+                <p className="text-xs text-gray-400">
+                  Добавить данные, проекты с одинаковым именем объединятся
+                </p>
               </div>
             </label>
             <label

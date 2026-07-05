@@ -12,6 +12,128 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 #root {
   min-height: 100vh;
+}
+
+/* Theme: dark (default) */
+.theme-dark {
+  --surface: #1a1d23;
+  --surface-elevated: #22262e;
+  --surface-border: #2d3340;
+  --text-primary: #e5e7eb;
+  --text-muted: #9ca3af;
+  --accent: #3b82f6;
+  --accent-muted: #1e3a5f;
+  color: var(--text-primary);
+  background-color: var(--surface);
+}
+
+/* Theme: AMOLED */
+.theme-amoled {
+  --surface: #000000;
+  --surface-elevated: #0a0a0a;
+  --surface-border: #1a1a1a;
+  --text-primary: #f3f4f6;
+  --text-muted: #6b7280;
+  --accent: #3b82f6;
+  --accent-muted: #172554;
+  color: var(--text-primary);
+  background-color: var(--surface);
+}
+
+/* Theme: light */
+.theme-light {
+  --surface: #f3f4f6;
+  --surface-elevated: #ffffff;
+  --surface-border: #e5e7eb;
+  --text-primary: #111827;
+  --text-muted: #6b7280;
+  --accent: #2563eb;
+  --accent-muted: #dbeafe;
+  color: var(--text-primary);
+  background-color: var(--surface);
+}
+
+.theme-dark .bg-surface,
+.theme-amoled .bg-surface,
+.theme-light .bg-surface {
+  background-color: var(--surface);
+}
+
+.theme-dark .bg-surface-elevated,
+.theme-amoled .bg-surface-elevated,
+.theme-light .bg-surface-elevated {
+  background-color: var(--surface-elevated);
+}
+
+.theme-dark .border-surface-border,
+.theme-amoled .border-surface-border,
+.theme-light .border-surface-border {
+  border-color: var(--surface-border);
+}
+
+.theme-dark .bg-accent-muted,
+.theme-amoled .bg-accent-muted,
+.theme-light .bg-accent-muted {
+  background-color: var(--accent-muted);
+}
+
+.theme-dark .bg-accent,
+.theme-amoled .bg-accent,
+.theme-light .bg-accent {
+  background-color: var(--accent);
+}
+
+.theme-dark .text-gray-300,
+.theme-amoled .text-gray-300 {
+  color: var(--text-primary);
+}
+
+.theme-light .text-gray-300 {
+  color: #374151;
+}
+
+.theme-light .text-gray-400,
+.theme-light .text-gray-500 {
+  color: var(--text-muted);
+}
+
+/* Font sizes */
+.font-size-compact {
+  font-size: 13px;
+}
+
+.font-size-compact .text-sm {
+  font-size: 12px;
+}
+
+.font-size-compact .text-xs {
+  font-size: 11px;
+}
+
+.font-size-normal {
+  font-size: 14px;
+}
+
+.font-size-large {
+  font-size: 16px;
+}
+
+.font-size-large .text-sm {
+  font-size: 15px;
+}
+
+.font-size-large .text-lg {
+  font-size: 20px;
+}
+
+.font-size-large .text-xl {
+  font-size: 24px;
 }

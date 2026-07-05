@@ -16,12 +16,36 @@ export interface ImportResult {
   error?: string
 }
 
+export interface ExportReport {
+  exportedAt: string
+  appVersion: string
+  formatVersion: string
+  projectCount: number
+  taskCount: number
+  doneCount: number
+  tagCount: number
+  templateCount: number
+  projectTemplateCount: number
+  noteCount: number
+  boardNodeCount: number
+  activityLogCount: number
+}
+
+export interface ExportResult {
+  data: DataPayload
+  report: ExportReport
+}
+
+export type ImportMode = 'replace' | 'new-project' | 'merge'
+
 export interface ToDoDeskApi {
   loadData: () => Promise<DataPayload>
   saveData: (data: DataPayload) => Promise<DataPayload>
-  exportData: () => Promise<DataPayload | null>
+  exportData: (mergeWithCurrent?: boolean) => Promise<ExportResult | null>
+  exportReport: () => Promise<ExportReport>
   pickImportFile: () => Promise<ImportPreview | null>
-  importFile: (filePath: string, mode: 'replace' | 'new-project') => Promise<ImportResult>
+  importFile: (filePath: string, mode: ImportMode) => Promise<ImportResult>
+  setDataPassword: (password: string | null) => Promise<boolean>
   checkUpdates: () => Promise<UpdateInfo>
   openUpdateUrl: (url: string) => Promise<void>
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void
@@ -33,9 +57,11 @@ export interface ToDoDeskApi {
 const api: ToDoDeskApi = {
   loadData: () => ipcRenderer.invoke('data:load'),
   saveData: (data) => ipcRenderer.invoke('data:save', data),
-  exportData: () => ipcRenderer.invoke('data:export'),
+  exportData: (mergeWithCurrent) => ipcRenderer.invoke('data:export', mergeWithCurrent),
+  exportReport: () => ipcRenderer.invoke('data:export-report'),
   pickImportFile: () => ipcRenderer.invoke('data:pick-import'),
   importFile: (filePath, mode) => ipcRenderer.invoke('data:import-file', filePath, mode),
+  setDataPassword: (password) => ipcRenderer.invoke('security:set-password', password),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
   openUpdateUrl: (url) => ipcRenderer.invoke('updates:open', url),
   onDataUpdated: (callback) => {

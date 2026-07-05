@@ -1,8 +1,28 @@
-import { Columns3, List, Plus, Search, Trash2 } from 'lucide-react'
+import {
+  Archive,
+  Calendar,
+  CheckSquare,
+  Columns3,
+  List,
+  Pin,
+  Plus,
+  Search,
+  Tag,
+  Trash2,
+  X
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
-import type { ViewId } from '../../../shared/schema'
+import type { QuickFilter, ViewId } from '../../../shared/schema'
+import {
+  bulkAddTag,
+  bulkArchive,
+  bulkDelete,
+  bulkMoveToProject,
+  bulkPin,
+  bulkSetDueDate
+} from '../utils/bulkActions'
 import { clearCompletedTasks, createRootTask, reorderTasks } from '../utils/taskHelpers'
-import { filterTasksForView, useAppStore } from '../store/useAppStore'
+import { filterTasksForView, sortProjects, useAppStore } from '../store/useAppStore'
 import ProjectDialog from './ProjectDialog'
 import TaskItem from './TaskItem'
 import clsx from 'clsx'
@@ -13,6 +33,15 @@ const viewTitles: Record<string, string> = {
   all: 'Все задачи',
   completed: 'Выполненные задачи'
 }
+
+const quickFilters: Array<{ id: QuickFilter; label: string }> = [
+  { id: 'none', label: 'Все' },
+  { id: 'overdue', label: 'Просрочено' },
+  { id: 'no-due', label: 'Без срока' },
+  { id: 'no-project', label: 'Без проекта' },
+  { id: 'important', label: 'Важные' },
+  { id: 'archived', label: 'Архив' }
+]
 
 function getViewTitle(view: ViewId, data: ReturnType<typeof useAppStore.getState>['data']): string {
   if (view.startsWith('project:')) {
@@ -26,19 +55,34 @@ function getViewTitle(view: ViewId, data: ReturnType<typeof useAppStore.getState
 }
 
 export default function TaskPanel(): JSX.Element {
-  const { data, activeView, searchQuery, setSearchQuery, persist, setActiveView } = useAppStore()
+  const {
+    data,
+    activeView,
+    searchQuery,
+    quickFilter,
+    bulkSelectedTaskIds,
+    setSearchQuery,
+    setQuickFilter,
+    persist,
+    setActiveView,
+    toggleBulkSelectedTaskId,
+    clearBulkSelection
+  } = useAppStore()
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showProjectDialog, setShowProjectDialog] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [bulkMode, setBulkMode] = useState(false)
 
   const tasks = useMemo(
-    () => filterTasksForView(data, activeView, searchQuery),
-    [data, activeView, searchQuery]
+    () => filterTasksForView(data, activeView, searchQuery, quickFilter),
+    [data, activeView, searchQuery, quickFilter]
   )
 
   const isCompletedView = activeView === 'completed'
   const isProject = activeView.startsWith('project:')
-  const canDrag = !isCompletedView
+  const canDrag = !isCompletedView && quickFilter !== 'archived'
+  const projects = sortProjects(data.projects)
+  const hasBulkSelection = bulkSelectedTaskIds.length > 0
 
   const addTask = async (): Promise<void> => {
     const title = newTaskTitle.trim()
@@ -72,6 +116,70 @@ export default function TaskPanel(): JSX.Element {
     reordered.splice(to, 0, draggingId)
     await persist(reorderTasks(data, reordered))
     setDraggingId(null)
+  }
+
+  const runBulkAction = async (action: () => ReturnType<typeof bulkDelete>): Promise<void> => {
+    if (!hasBulkSelection) return
+    await persist(action())
+    clearBulkSelection()
+    setBulkMode(false)
+  }
+
+  const handleBulkMove = async (): Promise<void> => {
+    const projectName = prompt(
+      `Проект (${projects.map((project) => project.name).join(', ') || 'нет проектов'}, пусто = входящие):`
+    )
+    if (projectName === null) return
+    const trimmed = projectName.trim()
+    const project = trimmed
+      ? projects.find((item) => item.name.toLowerCase() === trimmed.toLowerCase())
+      : null
+    if (trimmed && !project) {
+      alert('Проект не найден')
+      return
+    }
+    await runBulkAction(() => bulkMoveToProject(data, bulkSelectedTaskIds, project?.id ?? null))
+  }
+
+  const handleBulkTag = async (): Promise<void> => {
+    if (data.tags.length === 0) {
+      alert('Сначала создайте тег')
+      return
+    }
+    const tagName = prompt(`Тег (${data.tags.map((tag) => tag.name).join(', ')}):`)
+    if (!tagName?.trim()) return
+    const tag = data.tags.find((item) => item.name.toLowerCase() === tagName.trim().toLowerCase())
+    if (!tag) {
+      alert('Тег не найден')
+      return
+    }
+    await runBulkAction(() => bulkAddTag(data, bulkSelectedTaskIds, tag.id))
+  }
+
+  const handleBulkDueDate = async (): Promise<void> => {
+    const dueDate = prompt('Новая дата (ГГГГ-ММ-ДД, пусто = без срока):', '')
+    if (dueDate === null) return
+    const resolved = dueDate.trim() || null
+    await runBulkAction(() => bulkSetDueDate(data, bulkSelectedTaskIds, resolved))
+  }
+
+  const handleBulkArchive = async (): Promise<void> => {
+    const archived = quickFilter !== 'archived'
+    await runBulkAction(() => bulkArchive(data, bulkSelectedTaskIds, archived))
+  }
+
+  const handleBulkDelete = async (): Promise<void> => {
+    if (!confirm(`Удалить ${bulkSelectedTaskIds.length} задач?`)) return
+    await runBulkAction(() => bulkDelete(data, bulkSelectedTaskIds))
+  }
+
+  const handleBulkPin = async (): Promise<void> => {
+    await runBulkAction(() => bulkPin(data, bulkSelectedTaskIds, true))
+  }
+
+  const exitBulkMode = (): void => {
+    setBulkMode(false)
+    clearBulkSelection()
   }
 
   return (
@@ -109,6 +217,20 @@ export default function TaskPanel(): JSX.Element {
               className="rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
             />
           </div>
+          {!isCompletedView && (
+            <button
+              type="button"
+              onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
+              className={clsx(
+                'inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm',
+                bulkMode
+                  ? 'border-accent bg-accent-muted text-blue-300'
+                  : 'border-surface-border text-gray-300'
+              )}
+            >
+              <CheckSquare size={16} /> Выбрать
+            </button>
+          )}
           {isCompletedView ? (
             <button
               type="button"
@@ -131,6 +253,24 @@ export default function TaskPanel(): JSX.Element {
 
       {!isCompletedView && (
         <div className="border-b border-surface-border px-6 py-3">
+          <div className="mb-3 flex flex-wrap gap-2">
+            {quickFilters.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setQuickFilter(filter.id)}
+                className={clsx(
+                  'rounded-full px-3 py-1 text-xs transition',
+                  quickFilter === filter.id
+                    ? 'bg-accent-muted text-blue-300'
+                    : 'border border-surface-border text-gray-400 hover:text-gray-200'
+                )}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex gap-2">
             <input
               value={newTaskTitle}
@@ -162,12 +302,70 @@ export default function TaskPanel(): JSX.Element {
               task={task}
               view={activeView}
               draggable={canDrag}
+              bulkMode={bulkMode}
+              bulkSelected={bulkSelectedTaskIds.includes(task.id)}
+              onBulkToggle={toggleBulkSelectedTaskId}
               onDragStart={setDraggingId}
               onDrop={(id) => void handleDrop(id)}
             />
           ))
         )}
       </div>
+
+      {hasBulkSelection && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-surface-border bg-surface-elevated px-6 py-3">
+          <span className="text-sm text-gray-300">Выбрано: {bulkSelectedTaskIds.length}</span>
+          <button
+            type="button"
+            onClick={() => void handleBulkMove()}
+            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+          >
+            <List size={14} /> В проект
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulkTag()}
+            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+          >
+            <Tag size={14} /> Тег
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulkDueDate()}
+            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+          >
+            <Calendar size={14} /> Срок
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulkPin()}
+            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+          >
+            <Pin size={14} /> Закрепить
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulkArchive()}
+            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+          >
+            <Archive size={14} /> {quickFilter === 'archived' ? 'Разархивировать' : 'Архив'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            className="inline-flex items-center gap-1 rounded-lg border border-red-800/50 px-3 py-1.5 text-xs text-red-300"
+          >
+            <Trash2 size={14} /> Удалить
+          </button>
+          <button
+            type="button"
+            onClick={clearBulkSelection}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 hover:text-gray-300"
+          >
+            <X size={14} /> Сбросить
+          </button>
+        </div>
+      )}
 
       {showProjectDialog && <ProjectDialog onClose={() => setShowProjectDialog(false)} />}
     </section>

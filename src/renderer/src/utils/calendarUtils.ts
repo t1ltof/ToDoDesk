@@ -64,3 +64,34 @@ export function formatDayLabel(date: string): string {
     month: 'long'
   })
 }
+
+/** Monday date of the week containing the given date (YYYY-MM-DD). */
+export function getWeekKey(date = new Date()): string {
+  const day = date.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const monday = new Date(date)
+  monday.setDate(date.getDate() + mondayOffset)
+  return monday.toISOString().slice(0, 10)
+}
+
+export function getHeatmapDays(weeks = 12): string[] {
+  const today = new Date()
+  const day = today.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const endMonday = new Date(today)
+  endMonday.setDate(today.getDate() + mondayOffset)
+
+  const startMonday = new Date(endMonday)
+  startMonday.setDate(endMonday.getDate() - (weeks - 1) * 7)
+
+  const days: string[] = []
+  const cursor = new Date(startMonday)
+  const end = new Date(endMonday)
+  end.setDate(end.getDate() + 6)
+
+  while (cursor <= end) {
+    days.push(cursor.toISOString().slice(0, 10))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return days
+}

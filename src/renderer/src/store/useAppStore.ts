@@ -1,19 +1,34 @@
 import { create } from 'zustand'
-import type { DataPayload, Project, ProjectViewMode, Status, Task, ViewId } from '../../../shared/schema'
+import type {
+  DataPayload,
+  Project,
+  ProjectViewMode,
+  QuickFilter,
+  Status,
+  Task,
+  ViewId
+} from '../../../shared/schema'
 import { createEmptyData } from '../../../shared/schema'
+import { applyQuickFilter, sortTasksWithPins } from '../utils/taskFilters'
 
 interface AppState {
   data: DataPayload
   activeView: ViewId
   projectViewMode: ProjectViewMode
   searchQuery: string
+  quickFilter: QuickFilter
   selectedTaskId: string | null
+  bulkSelectedTaskIds: string[]
   undoSnapshot: DataPayload | null
   loading: boolean
   setActiveView: (view: ViewId) => void
   setProjectViewMode: (mode: ProjectViewMode) => void
   setSearchQuery: (query: string) => void
+  setQuickFilter: (filter: QuickFilter) => void
   setSelectedTaskId: (taskId: string | null) => void
+  setBulkSelectedTaskIds: (taskIds: string[]) => void
+  toggleBulkSelectedTaskId: (taskId: string) => void
+  clearBulkSelection: () => void
   setData: (data: DataPayload) => void
   load: () => Promise<void>
   persist: (data: DataPayload) => Promise<void>
@@ -25,18 +40,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeView: 'today',
   projectViewMode: 'list',
   searchQuery: '',
+  quickFilter: 'none',
   selectedTaskId: null,
+  bulkSelectedTaskIds: [],
   undoSnapshot: null,
   loading: true,
 
   setActiveView: (view) => {
-    set({ activeView: view, selectedTaskId: null })
+    set({ activeView: view, selectedTaskId: null, bulkSelectedTaskIds: [] })
     if (view.startsWith('kanban:')) set({ projectViewMode: 'kanban' })
     if (view.startsWith('project:')) set({ projectViewMode: 'list' })
   },
   setProjectViewMode: (mode) => set({ projectViewMode: mode }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setQuickFilter: (filter) => set({ quickFilter: filter }),
   setSelectedTaskId: (taskId) => set({ selectedTaskId: taskId }),
+  setBulkSelectedTaskIds: (taskIds) => set({ bulkSelectedTaskIds: taskIds }),
+  toggleBulkSelectedTaskId: (taskId) => {
+    const current = get().bulkSelectedTaskIds
+    set({
+      bulkSelectedTaskIds: current.includes(taskId)
+        ? current.filter((id) => id !== taskId)
+        : [...current, taskId]
+    })
+  },
+  clearBulkSelection: () => set({ bulkSelectedTaskIds: [] }),
   setData: (data) => set({ data }),
 
   load: async () => {
@@ -76,7 +104,8 @@ export function countCompletedTasks(data: DataPayload): number {
 export function filterTasksForView(
   data: DataPayload,
   view: ViewId,
-  searchQuery: string
+  searchQuery: string,
+  quickFilter: QuickFilter = 'none'
 ): Task[] {
   const query = searchQuery.trim().toLowerCase()
   let tasks = data.tasks.filter((task) => matchesSearch(task, query))
@@ -115,7 +144,14 @@ export function filterTasksForView(
     }
   }
 
-  return tasks.sort((a, b) => a.sortOrder - b.sortOrder)
+  if (quickFilter === 'archived') {
+    tasks = tasks.filter((task) => task.archived)
+  } else {
+    tasks = tasks.filter((task) => !task.archived)
+    tasks = applyQuickFilter(tasks, quickFilter)
+  }
+
+  return sortTasksWithPins(tasks)
 }
 
 export function getChildTasks(data: DataPayload, parentId: string, status?: Status): Task[] {

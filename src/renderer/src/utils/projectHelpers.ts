@@ -3,7 +3,7 @@ import type { DataPayload, Project } from '../../../shared/schema'
 export function updateProject(
   data: DataPayload,
   projectId: string,
-  patch: Partial<Pick<Project, 'name' | 'color'>>
+  patch: Partial<Pick<Project, 'name' | 'color' | 'icon'>>
 ): DataPayload {
   return {
     ...data,

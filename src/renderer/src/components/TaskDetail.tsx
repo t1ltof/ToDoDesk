@@ -1,9 +1,10 @@
-import { Plus, Trash2, X } from 'lucide-react'
+import { Archive, Bell, Pin, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { Priority, Recurrence } from '../../../shared/schema'
 import { createTemplate } from '../utils/templateHelpers'
 import {
   addChecklistItem,
+  addReminderInHours,
   createSubtask,
   createTag,
   deleteTaskTree,
@@ -48,6 +49,14 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   const children = task ? getChildTasks(data, task.id) : []
   const taskTagNames = task ? getTaskTags(data, task.id) : []
 
+  const dependencyOptions = useMemo(
+    () =>
+      data.tasks.filter(
+        (item) => item.id !== selectedTaskId && item.status === 'todo' && item.parentId === null
+      ),
+    [data.tasks, selectedTaskId]
+  )
+
   if (!task) return null
 
   const save = async (next: typeof data): Promise<void> => {
@@ -59,8 +68,13 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       title: string
       description: string
       dueDate: string | null
+      dueTime: string | null
+      dependsOnTaskId: string | null
+      pinned: boolean
+      archived: boolean
       priority: Priority
       projectId: string | null
+      recurrence: Recurrence
     }>
   ): Promise<void> => {
     const current = useAppStore.getState().data
@@ -161,6 +175,20 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             />
           </div>
           <div>
+            <label className="mb-1 block text-xs text-gray-500">Время</label>
+            <input
+              type="time"
+              value={task.dueTime ?? ''}
+              onChange={(event) =>
+                void handleField({ dueTime: event.target.value || null })
+              }
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
             <label className="mb-1 block text-xs text-gray-500">Приоритет</label>
             <select
               value={task.priority}
@@ -173,6 +201,66 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
               <option value="important">Важный</option>
             </select>
           </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">Зависит от</label>
+            <select
+              value={task.dependsOnTaskId ?? ''}
+              onChange={(event) =>
+                void handleField({ dependsOnTaskId: event.target.value || null })
+              }
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+              <option value="">Нет зависимости</option>
+              {dependencyOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleField({ pinned: !task.pinned })}
+            className={clsx(
+              'inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm transition',
+              task.pinned
+                ? 'border-amber-700/50 bg-amber-950/30 text-amber-300'
+                : 'border-surface-border text-gray-400 hover:text-gray-200'
+            )}
+          >
+            <Pin size={14} /> {task.pinned ? 'Закреплена' : 'Закрепить'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleField({ archived: !task.archived })}
+            className={clsx(
+              'inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm transition',
+              task.archived
+                ? 'border-gray-600 bg-surface text-gray-200'
+                : 'border-surface-border text-gray-400 hover:text-gray-200'
+            )}
+          >
+            <Archive size={14} /> {task.archived ? 'В архиве' : 'В архив'}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const raw = prompt('Напомнить через сколько часов?', '2')
+              if (!raw?.trim()) return
+              const hours = Number(raw)
+              if (!Number.isFinite(hours) || hours <= 0) {
+                alert('Введите положительное число часов')
+                return
+              }
+              await save(addReminderInHours(data, task.id, hours))
+            }}
+            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
+          >
+            <Bell size={14} /> Напомнить через N часов
+          </button>
         </div>
 
         <div>
@@ -189,6 +277,11 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             <option value="weekly">Еженедельно</option>
             <option value="monthly">Ежемесячно</option>
           </select>
+          {task.recurrenceExceptions.length > 0 && (
+            <p className="mt-1 text-xs text-gray-500">
+              Исключений повторения: {task.recurrenceExceptions.length}
+            </p>
+          )}
         </div>
 
         <div>

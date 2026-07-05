@@ -16,11 +16,13 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
   const isEdit = Boolean(project)
   const [name, setName] = useState(project?.name ?? '')
   const [color, setColor] = useState(project?.color ?? COLORS[0])
+  const [icon, setIcon] = useState(project?.icon ?? '')
 
   useEffect(() => {
     if (project) {
       setName(project.name)
       setColor(project.color)
+      setIcon(project.icon ?? '')
     }
   }, [project])
 
@@ -29,12 +31,13 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
     if (!trimmed) return
 
     if (isEdit && project) {
-      await persist(updateProject(data, project.id, { name: trimmed, color }))
+      await persist(updateProject(data, project.id, { name: trimmed, color, icon: icon.trim() }))
     } else {
       const created = {
         id: uuidv4(),
         name: trimmed,
         color,
+        icon: icon.trim(),
         sortOrder: data.projects.length,
         archived: false
       }
@@ -69,6 +72,17 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
           autoFocus
           className="mt-4 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
         />
+
+        <div className="mt-3">
+          <p className="mb-1 text-xs text-gray-500">Иконка (эмодзи)</p>
+          <input
+            value={icon}
+            onChange={(event) => setIcon(event.target.value)}
+            placeholder="📁"
+            maxLength={4}
+            className="w-20 rounded-lg border border-surface-border bg-surface px-3 py-2 text-center text-lg"
+          />
+        </div>
 
         <div className="mt-4 flex gap-2">
           {COLORS.map((value) => (

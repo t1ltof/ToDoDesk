@@ -40,7 +40,21 @@ export function validateImportFile(sourcePath: string): ImportPreview {
 
   const data = file.data as Record<string, unknown>
 
-  for (const key of ['projects', 'tags', 'tasks', 'taskTags', 'checklistItems', 'reminders']) {
+  for (const key of [
+    'projects',
+    'tags',
+    'tasks',
+    'taskTags',
+    'checklistItems',
+    'reminders',
+    'boardNodes',
+    'boardLinks',
+    'boardGroups',
+    'notes',
+    'projectTemplates',
+    'activityLogs',
+    'weeklyGoals'
+  ]) {
     if (!(key in data)) base.warnings.push(`Отсутствует поле "${key}" — будет создано пустым`)
     else if (!Array.isArray(data[key])) base.errors.push(`Поле "${key}" должно быть массивом`)
   }
@@ -77,7 +91,7 @@ export function validateImportFile(sourcePath: string): ImportPreview {
     base.templateCount = parsed.data.templates.length
     base.valid = base.errors.length === 0
 
-    if (file.version && file.version !== '1.1' && file.version !== '1.0') {
+    if (file.version && !['1.0', '1.1', '1.2', '1.3'].includes(String(file.version))) {
       base.warnings.push(`Версия формата ${file.version} — данные будут мигрированы`)
     }
   } catch (error) {

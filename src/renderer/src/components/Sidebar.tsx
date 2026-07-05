@@ -6,10 +6,13 @@ import {
   Download,
   FolderKanban,
   Inbox,
+  LayoutDashboard,
   ListTodo,
   Pencil,
   Settings,
+  StickyNote,
   Tag,
+  Timer,
   Upload
 } from 'lucide-react'
 import { useState } from 'react'
@@ -27,6 +30,9 @@ const mainViews: Array<{ id: ViewId; label: string; icon: typeof Inbox }> = [
   { id: 'all', label: 'Все задачи', icon: ListTodo },
   { id: 'completed', label: 'Выполненные', icon: CheckCircle2 },
   { id: 'calendar', label: 'Календарь', icon: CalendarDays },
+  { id: 'board', label: 'Доска', icon: LayoutDashboard },
+  { id: 'notes', label: 'Заметки', icon: StickyNote },
+  { id: 'focus', label: 'Фокус', icon: Timer },
   { id: 'stats', label: 'Статистика', icon: BarChart3 }
 ]
 
@@ -96,6 +102,7 @@ export default function Sidebar({ onOpenSettings }: SidebarProps): JSX.Element {
                   >
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
                     <FolderKanban size={16} />
+                    {project.icon && <span className="shrink-0 text-sm">{project.icon}</span>}
                     <span className="truncate">{project.name}</span>
                   </button>
                   <button
@@ -150,7 +157,7 @@ export default function Sidebar({ onOpenSettings }: SidebarProps): JSX.Element {
 
         <div className="border-t border-surface-border px-3 py-2">
           <p className="text-[10px] leading-relaxed text-gray-500">
-            Ctrl+Shift+T — быстрое добавление · Ctrl+Z — отмена
+            Ctrl+N — быстрое добавление · Ctrl+F — поиск · Ctrl+1–7 — виды · Ctrl+Z — отмена
           </p>
         </div>
 

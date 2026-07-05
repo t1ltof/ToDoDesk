@@ -5,8 +5,17 @@ release
 *.log
 .DS_Store
 Thumbs.db
+
+# Данные приложения (runtime)
 data.tododesk
 data.tododesk.bak
 data.tododesk.tmp
 backups/
+data-dev/
+
+# Сборки
+*.exe
+*.tsbuildinfo
+
+# Локальное
 *.local

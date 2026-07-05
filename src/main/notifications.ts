@@ -1,5 +1,5 @@
 import { Notification, type BrowserWindow } from 'electron'
-import type { DataPayload, Settings, Task } from '../shared/schema'
+import type { DataPayload, Reminder, Settings, Task } from '../shared/schema'
 
 const firedReminders = new Set<string>()
 
@@ -9,6 +9,26 @@ function todayKey(): string {
 
 function parseDueDateTime(dueDate: string, hour: number, minute: number): Date {
   return new Date(dueDate + `T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`)
+}
+
+function parseTimeToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+function isQuietHours(settings: Settings, now: Date): boolean {
+  const start = settings.quietHoursStart
+  const end = settings.quietHoursEnd
+  if (!start || !end) return false
+
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  const startMin = parseTimeToMinutes(start)
+  const endMin = parseTimeToMinutes(end)
+
+  if (startMin <= endMin) {
+    return nowMin >= startMin && nowMin < endMin
+  }
+  return nowMin >= startMin || nowMin < endMin
 }
 
 function showNotification(
@@ -31,7 +51,7 @@ function showNotification(
   notification.show()
 }
 
-function collectReminders(data: DataPayload, settings: Settings, now: Date): Task[] {
+function collectDueDateReminders(data: DataPayload, settings: Settings, now: Date): Task[] {
   const due: Task[] = []
   const todoTasks = data.tasks.filter((task) => task.status === 'todo' && task.dueDate)
 
@@ -60,16 +80,36 @@ function collectReminders(data: DataPayload, settings: Settings, now: Date): Tas
   return due
 }
 
+function collectCustomReminders(data: DataPayload, now: Date): Array<{ task: Task; reminder: Reminder }> {
+  const result: Array<{ task: Task; reminder: Reminder }> = []
+  const nowMs = now.getTime()
+
+  for (const reminder of data.reminders) {
+    const remindAt = new Date(reminder.remindAt).getTime()
+    if (remindAt > nowMs) continue
+    if (nowMs - remindAt >= 60_000) continue
+
+    const task = data.tasks.find((t) => t.id === reminder.taskId && t.status === 'todo')
+    if (task) result.push({ task, reminder })
+  }
+
+  return result
+}
+
 export function checkDueTasks(
   data: DataPayload,
   getWindow: () => BrowserWindow | null
 ): void {
   const settings = data.settings
   const now = new Date()
-  const reminders = collectReminders(data, settings, now)
 
-  for (const task of reminders) {
-    const key = `${task.id}-${now.toISOString().slice(0, 16)}`
+  if (isQuietHours(settings, now)) return
+
+  const dueDateReminders = collectDueDateReminders(data, settings, now)
+  const customReminders = collectCustomReminders(data, now)
+
+  for (const task of dueDateReminders) {
+    const key = `due-${task.id}-${now.toISOString().slice(0, 16)}`
     if (firedReminders.has(key)) continue
     firedReminders.add(key)
 
@@ -82,12 +122,24 @@ export function checkDueTasks(
     )
   }
 
-  if (reminders.length === 0) {
+  for (const { task, reminder } of customReminders) {
+    const key = `custom-${reminder.id}`
+    if (firedReminders.has(key)) continue
+    firedReminders.add(key)
+
+    showNotification('ToDoDesk — напоминание', task.title, task.id, getWindow)
+  }
+
+  if (dueDateReminders.length === 0 && customReminders.length === 0) {
     const today = todayKey()
     const overdue = data.tasks.filter(
       (task) => task.status === 'todo' && task.dueDate && task.dueDate < today
     )
-    if (overdue.length > 0 && now.getHours() === settings.notificationHour && now.getMinutes() === settings.notificationMinute) {
+    if (
+      overdue.length > 0 &&
+      now.getHours() === settings.notificationHour &&
+      now.getMinutes() === settings.notificationMinute
+    ) {
       const key = `overdue-summary-${today}`
       if (!firedReminders.has(key)) {
         firedReminders.add(key)

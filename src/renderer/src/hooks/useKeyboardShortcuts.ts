@@ -1,9 +1,23 @@
 import { useEffect } from 'react'
+import type { ViewId } from '../../../shared/schema'
 import { deleteTaskTree } from '../utils/taskHelpers'
 import { useAppStore } from '../store/useAppStore'
 
-export function useKeyboardShortcuts(onQuickAdd: () => void): void {
-  const { undo, selectedTaskId, persist, setSelectedTaskId, setSearchQuery } = useAppStore()
+const VIEW_SHORTCUTS: ViewId[] = [
+  'today',
+  'inbox',
+  'all',
+  'completed',
+  'calendar',
+  'board',
+  'stats'
+]
+
+export function useKeyboardShortcuts(
+  onQuickAdd: () => void,
+  onGlobalSearch: () => void
+): void {
+  const { undo, selectedTaskId, persist, setSelectedTaskId, setActiveView } = useAppStore()
 
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
@@ -17,12 +31,26 @@ export function useKeyboardShortcuts(onQuickAdd: () => void): void {
         return
       }
 
-      if (typing) return
-
-      if (event.key === 'n' || event.key === 'N') {
+      if (event.ctrlKey && (event.key === 'n' || event.key === 'N')) {
         event.preventDefault()
         onQuickAdd()
+        return
       }
+
+      if (event.ctrlKey && (event.key === 'f' || event.key === 'F')) {
+        event.preventDefault()
+        onGlobalSearch()
+        return
+      }
+
+      if (event.ctrlKey && event.key >= '1' && event.key <= '7') {
+        event.preventDefault()
+        setActiveView(VIEW_SHORTCUTS[Number(event.key) - 1])
+        return
+      }
+
+      if (typing) return
+
       if (event.key === '/') {
         event.preventDefault()
         document.querySelector<HTMLInputElement>('input[placeholder="Поиск..."]')?.focus()
@@ -41,5 +69,5 @@ export function useKeyboardShortcuts(onQuickAdd: () => void): void {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [undo, selectedTaskId, persist, setSelectedTaskId, setSearchQuery, onQuickAdd])
+  }, [undo, selectedTaskId, persist, setSelectedTaskId, setActiveView, onQuickAdd, onGlobalSearch])
 }
