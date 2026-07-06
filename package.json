@@ -10,7 +10,8 @@
     "dev:clean": "powershell -Command \"Get-Process ToDoDesk,electron -ErrorAction SilentlyContinue | Stop-Process -Force; if (Test-Path node_modules/.vite) { Remove-Item -Recurse -Force node_modules/.vite }\" && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "npm run build && electron-builder --win portable",
+    "dist": "node scripts/dist.mjs",
+    "dist:full": "npm run build && electron-builder --win portable",
     "typecheck": "tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
+    "@electron/asar": "^4.0.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@types/uuid": "^10.0.0",
