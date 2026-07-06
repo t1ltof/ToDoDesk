@@ -57,10 +57,19 @@ export interface SaveDataOptions {
   clearUnsaved?: boolean
 }
 
+export type SyncStatus = 'disabled' | 'idle' | 'synced' | 'pending' | 'error'
+
+export interface SyncStatusInfo {
+  status: SyncStatus
+  message: string
+  lastPushAt: string | null
+}
+
 export interface SyncNowResult {
   ok: boolean
   action?: 'pushed' | 'pulled' | 'unchanged'
   error?: string
+  data?: DataPayload
 }
 
 export interface ToDoDeskApi {
@@ -78,9 +87,13 @@ export interface ToDoDeskApi {
   importFile: (filePath: string, mode: ImportMode) => Promise<ImportResult>
   setDataPassword: (password: string | null) => Promise<boolean>
   setUnsavedChanges: (hasUnsaved: boolean) => Promise<void>
-  syncPushNow: () => Promise<SyncNowResult>
+  syncPushNow: (data: DataPayload) => Promise<SyncNowResult>
   syncPullNow: () => Promise<SyncNowResult>
-  resolveSyncConflict: (choice: SyncConflictChoice) => Promise<DataPayload | null>
+  getSyncStatus: () => Promise<SyncStatusInfo>
+  resolveSyncConflict: (
+    choice: SyncConflictChoice,
+    localData?: DataPayload
+  ) => Promise<DataPayload | null>
   checkUpdates: () => Promise<UpdateInfo>
   openUpdateUrl: (url: string) => Promise<void>
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void

@@ -24,8 +24,9 @@ export default function ProjectTemplatesDialog({
       ? [{ title: taskTitle.trim(), description: '', priority: 'normal' as const, checklistTexts: [] }]
       : []
 
+    const current = useAppStore.getState().data
     await persist(
-      createProjectTemplate(data, {
+      createProjectTemplate(current, {
         name: name.trim(),
         description: '',
         projectColor: '#3b82f6',
@@ -38,7 +39,8 @@ export default function ProjectTemplatesDialog({
   }
 
   const handleApply = async (templateId: string): Promise<void> => {
-    const next = applyProjectTemplate(data, templateId)
+    const current = useAppStore.getState().data
+    const next = applyProjectTemplate(current, templateId)
     await persist(next)
     const project = next.projects[next.projects.length - 1]
     if (project) setActiveView(`project:${project.id}`)
@@ -79,7 +81,10 @@ export default function ProjectTemplatesDialog({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void persist(deleteProjectTemplate(data, tpl.id))}
+                    onClick={() => {
+                      const current = useAppStore.getState().data
+                      void persist(deleteProjectTemplate(current, tpl.id))
+                    }}
                     className="rounded p-1 text-gray-500 hover:text-red-300"
                   >
                     <Trash2 size={14} />

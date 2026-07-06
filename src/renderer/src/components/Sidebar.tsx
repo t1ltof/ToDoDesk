@@ -75,6 +75,7 @@ export default function Sidebar({ onOpenSettings }: SidebarProps): JSX.Element {
   return (
     <>
       <aside
+        data-testid="sidebar"
         className={clsx(
           'flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-surface-border bg-surface-elevated',
           compact ? 'w-16' : 'w-64'

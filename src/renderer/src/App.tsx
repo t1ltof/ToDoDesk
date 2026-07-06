@@ -73,7 +73,7 @@ export default function App(): JSX.Element {
       const withRules = ensureOverdueSmartRule(currentData)
       const applied = applySmartRules(withRules)
       if (JSON.stringify(applied) !== JSON.stringify(currentData)) {
-        useAppStore.getState().setData(applied)
+        void useAppStore.getState().persist(applied, { clearUnsaved: false })
       } else if (withRules.smartRules.length !== currentData.smartRules.length) {
         void useAppStore.getState().persist(withRules)
       }
@@ -84,7 +84,7 @@ export default function App(): JSX.Element {
       const current = useAppStore.getState().data
       const next = applySmartRules(current)
       if (JSON.stringify(next) !== JSON.stringify(current)) {
-        useAppStore.getState().setData(next)
+        void useAppStore.getState().persist(next, { clearUnsaved: false })
       }
     }, 60_000)
 
@@ -244,7 +244,10 @@ export default function App(): JSX.Element {
         <SyncConflictDialog
           conflict={syncConflict}
           onResolve={async (choice) => {
-            const resolved = await window.tododesk.resolveSyncConflict(choice)
+            const resolved = await window.tododesk.resolveSyncConflict(
+              choice,
+              choice === 'local' ? useAppStore.getState().data : undefined
+            )
             if (resolved) setData(resolved)
             setSyncConflict(null)
           }}

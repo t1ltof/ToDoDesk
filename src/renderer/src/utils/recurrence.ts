@@ -61,7 +61,7 @@ export function completeTask(data: DataPayload, taskId: string): DataPayload {
 
   let next: DataPayload = { ...data, tasks: updatedTasks }
 
-  if (task.recurrence !== 'none' && task.dueDate) {
+  if (task.status === 'todo' && task.recurrence !== 'none' && task.dueDate) {
     const newDue = nextDueDate(task.dueDate, task.recurrence, task.recurrenceExceptions)
     const newTask: Task = {
       id: uuidv4(),

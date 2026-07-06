@@ -30,7 +30,8 @@ export default function QuickAddDialog({ open, onClose }: QuickAddDialogProps): 
     }
 
     const today = todayKey()
-    const next = createRootTask(data, {
+    const current = useAppStore.getState().data
+    const next = createRootTask(current, {
       title: trimmed,
       projectId: null,
       dueDate: today

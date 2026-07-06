@@ -114,7 +114,8 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
         : null
 
     const dueDate = activeView === 'today' ? todayKey() : null
-    let next = createRootTask(data, { title, projectId, dueDate })
+    const current = useAppStore.getState().data
+    let next = createRootTask(current, { title, projectId, dueDate })
     if (activeView.startsWith('tag:')) {
       const tagId = activeView.replace('tag:', '')
       const createdTask = next.tasks[next.tasks.length - 1]
@@ -127,7 +128,8 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
   const handleClearCompleted = async (): Promise<void> => {
     const count = data.tasks.filter((t) => t.status === 'done').length
     if (!count || !confirm(`Удалить ${count} выполненных задач?`)) return
-    await persist(clearCompletedTasks(data))
+    const current = useAppStore.getState().data
+    await persist(clearCompletedTasks(current))
   }
 
   const handleDrop = async (
@@ -148,7 +150,8 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
     const insertAt = dropPosition === 'after' ? to + 1 : to
     reordered.splice(insertAt, 0, draggingId)
 
-    await persist(reorderTasks(data, reordered))
+    const current = useAppStore.getState().data
+    await persist(reorderTasks(current, reordered))
     setDraggingId(null)
   }
 
@@ -162,13 +165,16 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
     reordered.splice(from, 1)
     reordered.push(draggingId)
 
-    await persist(reorderTasks(data, reordered))
+    const current = useAppStore.getState().data
+    await persist(reorderTasks(current, reordered))
     setDraggingId(null)
   }
 
-  const runBulkAction = async (action: () => ReturnType<typeof bulkDelete>): Promise<void> => {
+  const runBulkAction = async (
+    action: (current: ReturnType<typeof useAppStore.getState>['data']) => ReturnType<typeof bulkDelete>
+  ): Promise<void> => {
     if (!hasBulkSelection) return
-    await persist(action())
+    await persist(action(useAppStore.getState().data))
     clearBulkSelection()
     setBulkMode(false)
     focusNewTaskInput()
@@ -187,7 +193,9 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
       alert('Проект не найден')
       return
     }
-    await runBulkAction(() => bulkMoveToProject(data, bulkSelectedTaskIds, project?.id ?? null))
+    await runBulkAction((current) =>
+      bulkMoveToProject(current, bulkSelectedTaskIds, project?.id ?? null)
+    )
   }
 
   const handleBulkTag = async (): Promise<void> => {
@@ -202,28 +210,28 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
       alert('Тег не найден')
       return
     }
-    await runBulkAction(() => bulkAddTag(data, bulkSelectedTaskIds, tag.id))
+    await runBulkAction((current) => bulkAddTag(current, bulkSelectedTaskIds, tag.id))
   }
 
   const handleBulkDueDate = async (): Promise<void> => {
     const dueDate = prompt('Новая дата (ГГГГ-ММ-ДД, пусто = без срока):', '')
     if (dueDate === null) return
     const resolved = dueDate.trim() || null
-    await runBulkAction(() => bulkSetDueDate(data, bulkSelectedTaskIds, resolved))
+    await runBulkAction((current) => bulkSetDueDate(current, bulkSelectedTaskIds, resolved))
   }
 
   const handleBulkArchive = async (): Promise<void> => {
     const archived = quickFilter !== 'archived'
-    await runBulkAction(() => bulkArchive(data, bulkSelectedTaskIds, archived))
+    await runBulkAction((current) => bulkArchive(current, bulkSelectedTaskIds, archived))
   }
 
   const handleBulkDelete = async (): Promise<void> => {
     if (!confirm(`Удалить ${bulkSelectedTaskIds.length} задач?`)) return
-    await runBulkAction(() => bulkDelete(data, bulkSelectedTaskIds))
+    await runBulkAction((current) => bulkDelete(current, bulkSelectedTaskIds))
   }
 
   const handleBulkPin = async (): Promise<void> => {
-    await runBulkAction(() => bulkPin(data, bulkSelectedTaskIds, true))
+    await runBulkAction((current) => bulkPin(current, bulkSelectedTaskIds, true))
   }
 
   const exitBulkMode = (): void => {

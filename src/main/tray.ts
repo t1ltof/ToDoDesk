@@ -1,5 +1,6 @@
 import { app, Menu, Tray, type BrowserWindow } from 'electron'
 import type { DataPayload } from '../shared/schema'
+import { getSyncStatusInfo, type SyncStatusInfo } from './syncScheduler'
 import { createTrayIconWithCount } from './trayBadge'
 
 let tray: Tray | null = null
@@ -41,7 +42,22 @@ function getTodayTasks(data: DataPayload, limit = 8) {
     .slice(0, limit)
 }
 
-function buildContextMenu(data: DataPayload): Menu {
+function syncStatusLabel(info: SyncStatusInfo): string {
+  switch (info.status) {
+    case 'synced':
+      return `Синхронизация: актуально`
+    case 'pending':
+      return 'Синхронизация: ожидание отправки'
+    case 'error':
+      return `Синхронизация: ошибка`
+    case 'idle':
+      return 'Синхронизация: включена'
+    default:
+      return 'Синхронизация: отключена'
+  }
+}
+
+function buildContextMenu(data: DataPayload, syncInfo: SyncStatusInfo): Menu {
   const showWindow = (): void => {
     const window = getWindowRef?.()
     if (!window) return
@@ -73,6 +89,9 @@ function buildContextMenu(data: DataPayload): Menu {
       submenu: todaySubmenu
     },
     { type: 'separator' },
+    { label: syncStatusLabel(syncInfo), enabled: false },
+    { label: syncInfo.message, enabled: false },
+    { type: 'separator' },
     { label: 'Выход', click: () => onQuitRef?.() }
   ])
 }
@@ -81,6 +100,7 @@ export function updateTrayTooltip(data: DataPayload): void {
   if (!tray) return
   const count = countTodayTasks(data)
   const overdue = countOverdueTasks(data)
+  const syncInfo = getSyncStatusInfo(data)
   let label = 'ToDoDesk'
   if (count > 0) {
     label = `ToDoDesk — ${count} на сегодня`
@@ -88,9 +108,14 @@ export function updateTrayTooltip(data: DataPayload): void {
   } else if (overdue > 0) {
     label = `ToDoDesk — ${overdue} просрочено`
   }
+
+  if (syncInfo.status !== 'disabled') {
+    label += ` | ${syncStatusLabel(syncInfo)}`
+  }
+
   tray.setToolTip(label)
-  tray.setImage(createTrayIconWithCount(count, overdue))
-  tray.setContextMenu(buildContextMenu(data))
+  tray.setImage(createTrayIconWithCount(count, overdue, syncInfo.status))
+  tray.setContextMenu(buildContextMenu(data, syncInfo))
 }
 
 export function createTray(

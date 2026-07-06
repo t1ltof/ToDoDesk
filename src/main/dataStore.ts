@@ -26,8 +26,9 @@ import { encrypt, getDataPassword } from './encryption'
 import { readDataFileContent } from './dataFileIO'
 import { markSyncWrite } from './syncWatcher'
 import type { BoardLink, BoardNode } from '../shared/schema'
+import { mergeById } from '../shared/mergeById'
 
-const APP_VERSION = '0.9.0'
+const APP_VERSION = '1.0.0'
 
 export class DataLoadError extends Error {
   readonly needsPassword: boolean
@@ -536,8 +537,8 @@ export function mergePayloads(current: DataPayload, imported: DataPayload): Data
           !current.taskTags.some((c) => c.taskId === l.taskId && c.tagId === l.tagId)
       )
     ],
-    checklistItems: [...current.checklistItems, ...remapped.checklistItems],
-    reminders: [...current.reminders, ...remapped.reminders],
+    checklistItems: mergeById(current.checklistItems, remapped.checklistItems),
+    reminders: mergeById(current.reminders, remapped.reminders),
     templates: [...current.templates, ...remapped.templates],
     projectTemplates: [...current.projectTemplates, ...remapped.projectTemplates],
     notes: [
@@ -550,8 +551,8 @@ export function mergePayloads(current: DataPayload, imported: DataPayload): Data
       ...current.boardNodes,
       ...remapped.boardNodes.filter((n) => !existingBoardNodeIds.has(n.id))
     ],
-    boardLinks: [...current.boardLinks, ...remapped.boardLinks],
-    boardGroups: [...current.boardGroups, ...remapped.boardGroups],
+    boardLinks: mergeById(current.boardLinks, remapped.boardLinks),
+    boardGroups: mergeById(current.boardGroups, remapped.boardGroups),
     taskAttachments: [
       ...current.taskAttachments,
       ...remapped.taskAttachments.filter(
@@ -606,8 +607,18 @@ export function importAsNewProject(sourcePath: string): DataPayload {
   const idMap = new Map<string, string>()
   const existing = collectExistingIds(current)
 
+  const tagNameMap = new Map(current.tags.map((t) => [t.name.toLowerCase(), t.id]))
+  for (const tag of parsed.data.tags) {
+    const existingId = tagNameMap.get(tag.name.toLowerCase())
+    if (existingId) {
+      idMap.set(tag.id, existingId)
+    } else {
+      const newId = ensureId(tag.id, idMap, existing)
+      tagNameMap.set(tag.name.toLowerCase(), newId)
+    }
+  }
+
   for (const task of parsed.data.tasks) ensureId(task.id, idMap, existing)
-  for (const tag of parsed.data.tags) ensureId(tag.id, idMap, existing)
   for (const item of parsed.data.checklistItems) ensureId(item.id, idMap, existing)
   for (const item of parsed.data.reminders) ensureId(item.id, idMap, existing)
   for (const tpl of parsed.data.templates) ensureId(tpl.id, idMap, existing)
@@ -637,9 +648,10 @@ export function importAsNewProject(sourcePath: string): DataPayload {
     updatedAt: now
   }))
 
+  const existingTagIds = new Set(current.tags.map((tag) => tag.id))
   const merged: DataPayload = {
     projects: [...current.projects, newProject],
-    tags: [...current.tags, ...remapped.tags],
+    tags: [...current.tags, ...remapped.tags.filter((tag) => !existingTagIds.has(tag.id))],
     tasks: [...current.tasks, ...importedTasks],
     taskTags: [...current.taskTags, ...remapped.taskTags],
     checklistItems: [...current.checklistItems, ...remapped.checklistItems],

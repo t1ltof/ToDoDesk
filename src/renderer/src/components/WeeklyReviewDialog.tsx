@@ -68,22 +68,26 @@ export default function WeeklyReviewDialog({
   if (!open) return null
 
   const handleReschedule = async (taskId: string, dueDate: string): Promise<void> => {
-    await persist(updateTask(data, taskId, { dueDate }))
+    const current = useAppStore.getState().data
+    await persist(updateTask(current, taskId, { dueDate }))
   }
 
   const handleArchive = async (taskId: string): Promise<void> => {
-    await persist(updateTask(data, taskId, { archived: true }))
+    const current = useAppStore.getState().data
+    await persist(updateTask(current, taskId, { archived: true }))
   }
 
   const handleDelete = async (taskId: string): Promise<void> => {
     if (!confirm('Удалить задачу?')) return
-    await persist(deleteTaskTree(data, taskId))
+    const current = useAppStore.getState().data
+    await persist(deleteTaskTree(current, taskId))
   }
 
   const handleAddGoal = async (): Promise<void> => {
     const text = goalText.trim()
     if (!text) return
-    await persist(addWeeklyGoal(data, weekKey, text))
+    const current = useAppStore.getState().data
+    await persist(addWeeklyGoal(current, weekKey, text))
     setGoalText('')
   }
 

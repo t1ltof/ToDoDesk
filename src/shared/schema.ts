@@ -206,6 +206,8 @@ export const draftSchema = z.object({
   updatedAt: z.string()
 })
 
+export const scheduledExportFormatSchema = z.enum(['tododesk', 'csv', 'both'])
+
 export const boardHistoryEntrySchema = z.object({
   id: z.string().uuid(),
   timestamp: z.string(),
@@ -232,6 +234,14 @@ export const settingsSchema = z.object({
   autoBackupEnabled: z.boolean().default(true),
   autoBackupMaxVersions: z.number().int().min(1).max(50).default(10),
   syncFolderPath: z.string().nullable().default(null),
+  syncAutoPushEnabled: z.boolean().default(false),
+  syncAutoPushIntervalMinutes: z.number().int().min(1).max(120).default(5),
+  syncLastPushAt: z.string().nullable().default(null),
+  scheduledExportEnabled: z.boolean().default(false),
+  scheduledExportPath: z.string().nullable().default(null),
+  scheduledExportHour: z.number().int().min(0).max(23).default(3),
+  scheduledExportFormat: scheduledExportFormatSchema.default('tododesk'),
+  scheduledExportLastRunDate: z.string().nullable().default(null),
   dataPasswordEnabled: z.boolean().default(false),
   pomodoroWorkMinutes: z.number().int().min(1).max(120).default(25),
   pomodoroBreakMinutes: z.number().int().min(1).max(60).default(5),
@@ -305,6 +315,7 @@ export type BoardSnapshot = z.infer<typeof boardSnapshotSchema>
 export type SmartRule = z.infer<typeof smartRuleSchema>
 export type Draft = z.infer<typeof draftSchema>
 export type BoardHistoryEntry = z.infer<typeof boardHistoryEntrySchema>
+export type ScheduledExportFormat = z.infer<typeof scheduledExportFormatSchema>
 export type Settings = z.infer<typeof settingsSchema>
 export type DataPayload = z.infer<typeof dataPayloadSchema>
 export type DataFile = z.infer<typeof dataFileSchema>

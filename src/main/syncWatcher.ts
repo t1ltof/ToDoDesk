@@ -49,7 +49,10 @@ export function clearPendingExternalData(): void {
   pendingExternalData = null
 }
 
-export function resolveSyncConflict(choice: 'local' | 'external' | 'cancel'): DataPayload | null {
+export function resolveSyncConflict(
+  choice: 'local' | 'external' | 'cancel',
+  localData?: DataPayload
+): DataPayload | null {
   const externalPath = pendingExternalPath
   const externalData = pendingExternalData
   clearPendingExternalData()
@@ -59,7 +62,7 @@ export function resolveSyncConflict(choice: 'local' | 'external' | 'cancel'): Da
   }
 
   if (choice === 'local') {
-    const local = loadData()
+    const local = localData ?? loadData()
     saveData(local)
     markSyncWrite()
     try {

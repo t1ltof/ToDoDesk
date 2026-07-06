@@ -14,13 +14,15 @@ export default function TagManageDialog({ tag, onClose }: TagManageDialogProps):
   const [name, setName] = useState(tag.name)
 
   const handleSave = async (): Promise<void> => {
-    await persist(renameTag(data, tag.id, name))
+    const current = useAppStore.getState().data
+    await persist(renameTag(current, tag.id, name))
     onClose()
   }
 
   const handleDelete = async (): Promise<void> => {
     if (!confirm(`Удалить тег #${tag.name}?`)) return
-    await persist(deleteTag(data, tag.id))
+    const current = useAppStore.getState().data
+    await persist(deleteTag(current, tag.id))
     if (activeView === `tag:${tag.id}`) setActiveView('all')
     onClose()
   }

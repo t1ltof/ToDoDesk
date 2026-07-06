@@ -50,7 +50,7 @@ export default function PasteTasksDialog({
     }
 
     const context = getContextForView(view)
-    let next = data
+    let next = useAppStore.getState().data
     for (const title of lines) {
       next = createRootTask(next, { title, ...context })
     }

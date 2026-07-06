@@ -2,6 +2,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Note } from '../../../shared/schema'
 import MarkdownContent from './MarkdownContent'
+import { filterNotes } from '../utils/calendarFilters'
 import { createNote, deleteNote, updateNote } from '../utils/noteHelpers'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
@@ -11,17 +12,19 @@ export default function NotesView(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(data.notes[0]?.id ?? null)
   const [newTitle, setNewTitle] = useState('')
   const [contentMode, setContentMode] = useState<'edit' | 'preview'>('edit')
+  const [notesSearch, setNotesSearch] = useState('')
 
-  const notes = useMemo(
-    () => [...data.notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [data.notes]
-  )
+  const notes = useMemo(() => {
+    const filtered = filterNotes(data, notesSearch)
+    return [...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }, [data, notesSearch])
 
   const selected = notes.find((n) => n.id === selectedId) ?? null
 
   const handleCreate = async (): Promise<void> => {
     const title = newTitle.trim() || 'Без названия'
-    const next = createNote(data, title)
+    const current = useAppStore.getState().data
+    const next = createNote(current, title)
     await persist(next)
     setSelectedId(next.notes[0]?.id ?? null)
     setNewTitle('')
@@ -29,13 +32,15 @@ export default function NotesView(): JSX.Element {
 
   const handleUpdate = async (patch: Partial<Pick<Note, 'title' | 'content'>>): Promise<void> => {
     if (!selected) return
-    await persist(updateNote(data, selected.id, patch))
+    const current = useAppStore.getState().data
+    await persist(updateNote(current, selected.id, patch))
   }
 
   const handleDelete = async (): Promise<void> => {
     if (!selected) return
     if (!confirm(`Удалить заметку «${selected.title}»?`)) return
-    const next = deleteNote(data, selected.id)
+    const current = useAppStore.getState().data
+    const next = deleteNote(current, selected.id)
     await persist(next)
     setSelectedId(next.notes[0]?.id ?? null)
   }
@@ -45,6 +50,13 @@ export default function NotesView(): JSX.Element {
       <div className="flex w-72 flex-col border-r border-surface-border bg-surface-elevated">
         <div className="border-b border-surface-border p-4">
           <h2 className="text-lg font-semibold">Заметки</h2>
+          <input
+            data-testid="notes-search"
+            value={notesSearch}
+            onChange={(e) => setNotesSearch(e.target.value)}
+            placeholder="Поиск по названию и тексту..."
+            className="mt-3 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+          />
           <div className="mt-3 flex gap-2">
             <input
               value={newTitle}

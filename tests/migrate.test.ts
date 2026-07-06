@@ -39,4 +39,12 @@ describe('migratePayload', () => {
 
     assert.equal(migrated.boardHistory.length, 25)
   })
+
+  it('adds v1.0 sync and export settings defaults', () => {
+    const migrated = migratePayload({ ...createEmptyData(), settings: {} })
+    assert.equal(migrated.settings.syncAutoPushEnabled, false)
+    assert.equal(migrated.settings.syncAutoPushIntervalMinutes, 5)
+    assert.equal(migrated.settings.scheduledExportEnabled, false)
+    assert.equal(migrated.settings.scheduledExportFormat, 'tododesk')
+  })
 })

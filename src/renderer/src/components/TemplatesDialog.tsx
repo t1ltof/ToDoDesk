@@ -14,8 +14,9 @@ export default function TemplatesDialog({ onClose }: TemplatesDialogProps): JSX.
 
   const handleCreate = async (): Promise<void> => {
     if (!name.trim() || !title.trim()) return
+    const current = useAppStore.getState().data
     await persist(
-      createTemplate(data, {
+      createTemplate(current, {
         name: name.trim(),
         title: title.trim(),
         description: '',
@@ -50,14 +51,20 @@ export default function TemplatesDialog({ onClose }: TemplatesDialogProps): JSX.
                 <div className="flex gap-1">
                   <button
                     type="button"
-                    onClick={() => void persist(applyTemplate(data, tpl.id))}
+                    onClick={() => {
+                      const current = useAppStore.getState().data
+                      void persist(applyTemplate(current, tpl.id))
+                    }}
                     className="rounded px-2 py-1 text-xs text-blue-300 hover:bg-accent-muted"
                   >
                     Применить
                   </button>
                   <button
                     type="button"
-                    onClick={() => void persist(deleteTemplate(data, tpl.id))}
+                    onClick={() => {
+                      const current = useAppStore.getState().data
+                      void persist(deleteTemplate(current, tpl.id))
+                    }}
                     className="rounded p-1 text-gray-500 hover:text-red-300"
                   >
                     <Trash2 size={14} />

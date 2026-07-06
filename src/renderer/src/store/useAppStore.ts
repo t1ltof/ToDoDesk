@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 let recentTaskPersistTimer: ReturnType<typeof setTimeout> | null = null
+let persistChain: Promise<void> = Promise.resolve()
 import type {
   DataPayload,
   Project,
@@ -101,10 +102,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   persist: async (data, options?: { clearUnsaved?: boolean }) => {
-    const current = get().data
-    set({ undoSnapshot: structuredClone(current) })
-    const saved = await window.tododesk.saveData(data, { clearUnsaved: options?.clearUnsaved })
-    set({ data: saved })
+    const run = async (): Promise<void> => {
+      const current = get().data
+      set({ undoSnapshot: structuredClone(current) })
+      const saved = await window.tododesk.saveData(data, {
+        clearUnsaved: options?.clearUnsaved ?? false
+      })
+      set({ data: saved })
+    }
+    persistChain = persistChain.then(run, run)
+    await persistChain
   },
 
   undo: async () => {

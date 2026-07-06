@@ -2,6 +2,10 @@ import { app } from 'electron'
 import { join } from 'path'
 
 export function getDataDirectory(): string {
+  if (process.env.TODODESK_DATA_DIR?.trim()) {
+    return process.env.TODODESK_DATA_DIR.trim()
+  }
+
   if (app.isPackaged) {
     return join(process.env.PORTABLE_EXECUTABLE_DIR ?? join(process.execPath, '..'))
   }

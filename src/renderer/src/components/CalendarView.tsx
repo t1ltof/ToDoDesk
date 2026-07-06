@@ -14,9 +14,10 @@ import {
   todayKey
 } from '../utils/calendarUtils'
 import { buildCalendarTasksByDate, getCalendarRangeStartEnd } from '../utils/calendarTasks'
+import { applyCalendarFilters } from '../utils/calendarFilters'
 import { createRootTask, updateTask } from '../utils/taskHelpers'
 import { addWeeklyGoal, deleteWeeklyGoal, toggleWeeklyGoal } from '../utils/weeklyGoalsHelpers'
-import { useAppStore } from '../store/useAppStore'
+import { sortProjects, useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
 type CalendarMode = 'day' | 'week' | 'month'
@@ -82,8 +83,24 @@ export default function CalendarView(): JSX.Element {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newGoalText, setNewGoalText] = useState('')
   const [goalsFilter, setGoalsFilter] = useState<GoalsFilter>('active')
+  const [calendarSearch, setCalendarSearch] = useState('')
+  const [calendarProjectId, setCalendarProjectId] = useState<string | null>(null)
+  const [calendarTagId, setCalendarTagId] = useState<string | null>(null)
+  const [importantOnly, setImportantOnly] = useState(false)
 
   const today = todayKey()
+  const projects = sortProjects(data.projects)
+
+  const filteredCalendarData = useMemo(
+    () =>
+      applyCalendarFilters(data, {
+        search: calendarSearch,
+        projectId: calendarProjectId,
+        tagId: calendarTagId,
+        importantOnly
+      }),
+    [data, calendarSearch, calendarProjectId, calendarTagId, importantOnly]
+  )
 
   const displayDate = useMemo(() => {
     const d = new Date()
@@ -130,8 +147,9 @@ export default function CalendarView(): JSX.Element {
   )
 
   const tasksByDate = useMemo(
-    () => buildCalendarTasksByDate(data, calendarRange.start, calendarRange.end),
-    [data, calendarRange.start, calendarRange.end]
+    () =>
+      buildCalendarTasksByDate(filteredCalendarData, calendarRange.start, calendarRange.end),
+    [filteredCalendarData, calendarRange.start, calendarRange.end]
   )
 
   const filteredWeekGoals = useMemo(
@@ -141,8 +159,11 @@ export default function CalendarView(): JSX.Element {
   )
 
   const overdueTasks = useMemo(
-    () => data.tasks.filter((t) => t.status === 'todo' && t.dueDate && t.dueDate < today),
-    [data.tasks, today]
+    () =>
+      filteredCalendarData.tasks.filter(
+        (t) => t.status === 'todo' && t.dueDate && t.dueDate < today
+      ),
+    [filteredCalendarData.tasks, today]
   )
 
   const selectedTasks = tasksByDate.get(selectedDate) ?? []
@@ -192,7 +213,8 @@ export default function CalendarView(): JSX.Element {
   const addGoal = async (): Promise<void> => {
     const text = newGoalText.trim()
     if (!text) return
-    await persist(addWeeklyGoal(data, currentWeekKey, text))
+    const current = useAppStore.getState().data
+    await persist(addWeeklyGoal(current, currentWeekKey, text))
     setNewGoalText('')
   }
 
@@ -288,7 +310,10 @@ export default function CalendarView(): JSX.Element {
               >
                 <button
                   type="button"
-                  onClick={() => void persist(toggleWeeklyGoal(data, goal.id))}
+                  onClick={() => {
+                    const current = useAppStore.getState().data
+                    void persist(toggleWeeklyGoal(current, goal.id))
+                  }}
                   className={clsx(
                     'flex h-5 w-5 shrink-0 items-center justify-center rounded border',
                     goal.completed ? 'border-green-600 bg-green-700 text-white' : 'border-gray-600'
@@ -299,7 +324,10 @@ export default function CalendarView(): JSX.Element {
                 <span title={goal.text}>{goal.text}</span>
                 <button
                   type="button"
-                  onClick={() => void persist(deleteWeeklyGoal(data, goal.id))}
+                  onClick={() => {
+                    const current = useAppStore.getState().data
+                    void persist(deleteWeeklyGoal(current, goal.id))
+                  }}
                   className="text-gray-500 hover:text-red-400"
                 >
                   <Trash2 size={12} />
@@ -322,6 +350,50 @@ export default function CalendarView(): JSX.Element {
                 <Plus size={14} />
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="border-b border-surface-border px-6 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              data-testid="calendar-search"
+              value={calendarSearch}
+              onChange={(e) => setCalendarSearch(e.target.value)}
+              placeholder="Поиск задач в календаре..."
+              className="min-w-[12rem] flex-1 rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <select
+              value={calendarProjectId ?? ''}
+              onChange={(e) => setCalendarProjectId(e.target.value || null)}
+              className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+            >
+              <option value="">Все проекты</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={calendarTagId ?? ''}
+              onChange={(e) => setCalendarTagId(e.target.value || null)}
+              className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+            >
+              <option value="">Все теги</option>
+              {data.tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  #{tag.name}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={importantOnly}
+                onChange={(e) => setImportantOnly(e.target.checked)}
+              />
+              Только важные
+            </label>
           </div>
         </div>
 

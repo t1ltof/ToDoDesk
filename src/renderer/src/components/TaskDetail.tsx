@@ -100,7 +100,8 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       if (!currentTask) return
       if (title.trim() === currentTask.title && description === currentTask.description) return
       void persist(
-        upsertTaskDraft(current, task.id, title.trim() || currentTask.title, description)
+        upsertTaskDraft(current, task.id, title.trim() || currentTask.title, description),
+        { clearUnsaved: false }
       )
     }, 2000)
 
@@ -149,13 +150,15 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
 
   const discardDraft = async (): Promise<void> => {
     if (!task) return
-    await save(removeTaskDraft(data, task.id))
+    const current = useAppStore.getState().data
+    await save(removeTaskDraft(current, task.id))
     setShowDraftBanner(false)
   }
 
   const handleDelete = async (): Promise<void> => {
     if (!confirm('Удалить задачу и все подзадачи?')) return
-    const next = deleteTaskTree(data, task.id)
+    const current = useAppStore.getState().data
+    const next = deleteTaskTree(current, task.id)
     await save(next)
     setSelectedTaskId(null)
   }
@@ -163,32 +166,38 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   const handleAddSubtask = async (): Promise<void> => {
     const title = subtaskTitle.trim()
     if (!title) return
-    await save(createSubtask(data, task, title))
+    const current = useAppStore.getState().data
+    const currentTask = current.tasks.find((item) => item.id === task.id) ?? task
+    await save(createSubtask(current, currentTask, title))
     setSubtaskTitle('')
   }
 
   const handleAddChecklist = async (): Promise<void> => {
     const text = checklistText.trim()
     if (!text) return
-    await save(addChecklistItem(data, task.id, text))
+    const current = useAppStore.getState().data
+    await save(addChecklistItem(current, task.id, text))
     setChecklistText('')
   }
 
   const handleAttachFile = async (sourcePath: string, fileName?: string): Promise<void> => {
     const stored = await window.tododesk.copyAttachmentFile(sourcePath, fileName)
-    await save(addTaskAttachment(data, task.id, stored.fileName, stored.filePath))
+    const current = useAppStore.getState().data
+    await save(addTaskAttachment(current, task.id, stored.fileName, stored.filePath))
   }
 
   const handlePickAttachment = async (): Promise<void> => {
     const picked = await window.tododesk.pickAttachmentFile()
     if (!picked) return
-    await save(addTaskAttachment(data, task.id, picked.fileName, picked.filePath))
+    const current = useAppStore.getState().data
+    await save(addTaskAttachment(current, task.id, picked.fileName, picked.filePath))
   }
 
   const handleAddTag = async (): Promise<void> => {
     const name = newTagName.trim()
     if (!name) return
-    let next = createTag(data, name)
+    const current = useAppStore.getState().data
+    let next = createTag(current, name)
     const tag = next.tags.find((item) => item.name.toLowerCase() === name.toLowerCase())
     if (tag) next = toggleTaskTag(next, task.id, tag.id)
     await save(next)
@@ -340,7 +349,10 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
                   </button>
                   <button
                     type="button"
-                    onClick={() => void save(removeTaskAttachment(data, attachment.id))}
+                    onClick={() => {
+                      const current = useAppStore.getState().data
+                      void save(removeTaskAttachment(current, attachment.id))
+                    }}
                     className="text-gray-500 hover:text-red-300"
                   >
                     <Trash2 size={14} />
@@ -483,7 +495,8 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
                   return
                 }
                 const remindAt = new Date(Date.now() + hours * 3_600_000)
-                await save(addReminderInHours(data, task.id, hours))
+                const current = useAppStore.getState().data
+                await save(addReminderInHours(current, task.id, hours))
                 alert(
                   `Напоминание добавлено на ${remindAt.toLocaleString('ru-RU', {
                     day: 'numeric',
@@ -560,7 +573,10 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
                 <button
                   key={tag.id}
                   type="button"
-                  onClick={() => void save(toggleTaskTag(data, task.id, tag.id))}
+                  onClick={() => {
+                    const current = useAppStore.getState().data
+                    void save(toggleTaskTag(current, task.id, tag.id))
+                  }}
                   className={clsx(
                     'rounded-full px-2.5 py-1 text-xs transition',
                     active
@@ -604,7 +620,10 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
                 <input
                   type="checkbox"
                   checked={item.completed}
-                  onChange={() => void save(toggleChecklistItem(data, item.id))}
+                  onChange={() => {
+                    const current = useAppStore.getState().data
+                    void save(toggleChecklistItem(current, item.id))
+                  }}
                 />
                 <span
                   className={clsx(
@@ -616,7 +635,10 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
                 </span>
                 <button
                   type="button"
-                  onClick={() => void save(removeChecklistItem(data, item.id))}
+                  onClick={() => {
+                    const current = useAppStore.getState().data
+                    void save(removeChecklistItem(current, item.id))
+                  }}
                   className="text-gray-500 hover:text-red-300"
                 >
                   <X size={14} />
@@ -649,7 +671,8 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
           onClick={async () => {
             const name = prompt('Название проекта', `${task.title}`)
             if (!name?.trim()) return
-            const next = createProjectFromTaskBranch(data, task.id, name.trim())
+            const current = useAppStore.getState().data
+            const next = createProjectFromTaskBranch(current, task.id, name.trim())
             const project = next.projects[next.projects.length - 1]
             await save(next)
             if (project) useAppStore.getState().setActiveView(`project:${project.id}`)
@@ -679,12 +702,13 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
                 onClick={async () => {
                   const name = templateName.trim() || task.title
                   if (!name) return
-                  const tagIds = data.taskTags
+                  const current = useAppStore.getState().data
+                  const tagIds = current.taskTags
                     .filter((l) => l.taskId === task.id)
                     .map((l) => l.tagId)
                   const checklistTexts = checklist.map((c) => c.text)
                   await save(
-                    createTemplate(data, {
+                    createTemplate(current, {
                       name,
                       title: task.title,
                       description: task.description,

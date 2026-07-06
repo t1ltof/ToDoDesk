@@ -37,7 +37,8 @@ export default function SprintView(): JSX.Element {
 
   const handleCreate = async (): Promise<void> => {
     if (!name.trim()) return
-    const next = createSprint(data, { name, startDate, endDate, goal })
+    const current = useAppStore.getState().data
+    const next = createSprint(current, { name, startDate, endDate, goal })
     await persist(next)
     setSelectedSprintId(next.sprints[next.sprints.length - 1]?.id ?? null)
     setShowForm(false)
@@ -47,19 +48,22 @@ export default function SprintView(): JSX.Element {
 
   const handleDelete = async (sprint: Sprint): Promise<void> => {
     if (!confirm(`Удалить спринт «${sprint.name}»?`)) return
-    const next = deleteSprint(data, sprint.id)
+    const current = useAppStore.getState().data
+    const next = deleteSprint(current, sprint.id)
     await persist(next)
     setSelectedSprintId(next.sprints[0]?.id ?? null)
   }
 
   const handleSaveSprint = async (patch: Partial<Sprint>): Promise<void> => {
     if (!selectedSprint) return
-    await persist(updateSprint(data, selectedSprint.id, patch))
+    const current = useAppStore.getState().data
+    await persist(updateSprint(current, selectedSprint.id, patch))
   }
 
   const handleAssign = async (): Promise<void> => {
     if (!selectedSprint) return
-    await persist(assignTasksToSprint(data, selectedSprint.id, selectedTaskIds))
+    const current = useAppStore.getState().data
+    await persist(assignTasksToSprint(current, selectedSprint.id, selectedTaskIds))
   }
 
   return (

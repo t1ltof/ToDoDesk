@@ -30,18 +30,19 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
     const trimmed = name.trim()
     if (!trimmed) return
 
+    const current = useAppStore.getState().data
     if (isEdit && project) {
-      await persist(updateProject(data, project.id, { name: trimmed, color, icon: icon.trim() }))
+      await persist(updateProject(current, project.id, { name: trimmed, color, icon: icon.trim() }))
     } else {
       const created = {
         id: uuidv4(),
         name: trimmed,
         color,
         icon: icon.trim(),
-        sortOrder: data.projects.length,
+        sortOrder: current.projects.length,
         archived: false
       }
-      await persist({ ...data, projects: [...data.projects, created] })
+      await persist({ ...current, projects: [...current.projects, created] })
       setActiveView(`project:${created.id}`)
     }
 
@@ -52,7 +53,8 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
     if (!project) return
     if (!confirm(`Удалить проект «${project.name}»? Задачи переместятся во Входящие.`)) return
 
-    await persist(deleteProject(data, project.id))
+    const current = useAppStore.getState().data
+    await persist(deleteProject(current, project.id))
     if (activeView === `project:${project.id}`) setActiveView('inbox')
     onClose()
   }

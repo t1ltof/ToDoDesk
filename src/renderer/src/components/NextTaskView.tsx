@@ -32,7 +32,8 @@ export default function NextTaskView(): JSX.Element {
 
   const handleDone = async (): Promise<void> => {
     if (!nextTask) return
-    await persist(completeTask(data, nextTask.id))
+    const current = useAppStore.getState().data
+    await persist(completeTask(current, nextTask.id))
   }
 
   const handleStart = (): void => {

@@ -31,7 +31,10 @@ jobs:
       - name: Restore win-unpacked bootstrap
         continue-on-error: true
         run: |
-          gh release download v0.8.1 --repo ${{ github.repository }} -p ToDoDesk-win-unpacked-bootstrap.zip -D release-bootstrap
+          gh release download v0.9.0 --repo ${{ github.repository }} -p ToDoDesk-win-unpacked-bootstrap.zip -D release-bootstrap 2>$null
+          if (-not (Test-Path release-bootstrap/ToDoDesk-win-unpacked-bootstrap.zip)) {
+            gh release download v0.8.1 --repo ${{ github.repository }} -p ToDoDesk-win-unpacked-bootstrap.zip -D release-bootstrap
+          }
           Expand-Archive -Path release-bootstrap/ToDoDesk-win-unpacked-bootstrap.zip -DestinationPath release -Force
         env:
           GH_TOKEN: ${{ github.token }}

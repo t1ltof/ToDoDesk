@@ -26,6 +26,18 @@ import { getIconPath } from './resources'
 import { createTray, destroyTray, updateTrayTooltip } from './tray'
 import { checkForUpdates } from './updates'
 import {
+  startScheduledExportTimer,
+  stopScheduledExportTimer
+} from './scheduledExport'
+import {
+  getSyncStatusInfo,
+  markSyncPending,
+  recordManualPush,
+  refreshSyncStatus,
+  startSyncScheduler,
+  stopSyncScheduler
+} from './syncScheduler'
+import {
   pullSyncNow,
   pushSyncNow,
   resolveSyncConflict,
@@ -37,6 +49,7 @@ import type { DataPayload } from '../shared/schema'
 import type { SyncConflictChoice } from '../shared/sync'
 
 const isDev = !app.isPackaged
+const isE2e = process.env.TODODESK_E2E === '1'
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -81,7 +94,7 @@ function createWindow(startHidden = false): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    if (!startHidden) mainWindow?.show()
+    if (!startHidden || isE2e) mainWindow?.show()
   })
 
   mainWindow.on('close', (event) => {
@@ -104,8 +117,15 @@ function createWindow(startHidden = false): void {
 }
 
 function broadcastData(data: DataPayload): void {
+  refreshSyncStatus(data)
   updateTrayTooltip(data)
   mainWindow?.webContents.send('data:updated', data)
+}
+
+function refreshTray(data?: DataPayload): void {
+  const payload = data ?? loadData()
+  refreshSyncStatus(payload)
+  updateTrayTooltip(payload)
 }
 
 function applySettings(data: DataPayload): void {
@@ -123,6 +143,8 @@ function applySettings(data: DataPayload): void {
 function quitApp(): void {
   isQuitting = true
   stopSyncWatcher()
+  stopSyncScheduler()
+  stopScheduledExportTimer()
   unregisterHotkeys()
   destroyTray()
   if (reminderTimer) clearInterval(reminderTimer)
@@ -152,7 +174,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 const startHidden = process.argv.includes('--hidden')
-const gotLock = app.requestSingleInstanceLock()
+const gotLock = isE2e || app.requestSingleInstanceLock()
 
 if (!gotLock) {
   app.quit()
@@ -179,14 +201,17 @@ if (!gotLock) {
       'data:save',
       (_, payload: DataPayload | { data: DataPayload; clearUnsaved?: boolean }) => {
         const data = 'data' in payload ? payload.data : payload
-        const clearUnsaved = 'data' in payload ? payload.clearUnsaved !== false : false
+        const clearUnsaved = 'data' in payload && payload.clearUnsaved === true
         saveData(data)
         if (clearUnsaved) {
           hasUnsavedChanges = false
           updateWindowTitle()
         }
         applySettings(data)
-        updateTrayTooltip(data)
+        if (data.settings.syncAutoPushEnabled && data.settings.syncFolderPath) {
+          markSyncPending()
+        }
+        refreshTray(data)
         return data
       }
     )
@@ -218,10 +243,19 @@ if (!gotLock) {
       updateWindowTitle()
     })
 
-    ipcMain.handle('sync:push-now', () => {
-      const data = loadData()
-      return pushSyncNow(data.settings.syncFolderPath)
+    ipcMain.handle('sync:push-now', (_, localData: DataPayload) => {
+      saveData(localData)
+      applySettings(localData)
+      const result = pushSyncNow(localData.settings.syncFolderPath)
+      const updated = recordManualPush(localData, result.ok, result.error)
+      if (result.ok && updated !== localData) {
+        saveData(updated)
+      }
+      refreshTray(updated)
+      return result
     })
+
+    ipcMain.handle('sync:status', () => getSyncStatusInfo(loadData()))
 
     ipcMain.handle('sync:pull-now', () => {
       const data = loadData()
@@ -233,8 +267,8 @@ if (!gotLock) {
       return result
     })
 
-    ipcMain.handle('sync:resolve', (_, choice: SyncConflictChoice) => {
-      const data = resolveSyncConflict(choice)
+    ipcMain.handle('sync:resolve', (_, choice: SyncConflictChoice, localData?: DataPayload) => {
+      const data = resolveSyncConflict(choice, localData)
       if (data) {
         applySettings(data)
         broadcastData(data)
@@ -316,7 +350,10 @@ if (!gotLock) {
     }
 
     applySettings(data)
+    refreshSyncStatus(data)
     updateTrayTooltip(data)
+    startSyncScheduler(() => refreshTray())
+    startScheduledExportTimer()
     checkDueTasks(data, getWindow)
     reminderTimer = scheduleReminders(loadData, getWindow)
     void maybeCheckUpdates(data)
@@ -326,6 +363,8 @@ if (!gotLock) {
 
   app.on('will-quit', () => {
     stopSyncWatcher()
+    stopSyncScheduler()
+    stopScheduledExportTimer()
     unregisterHotkeys()
   })
 }

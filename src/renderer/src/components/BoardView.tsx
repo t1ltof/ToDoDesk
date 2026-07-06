@@ -161,8 +161,9 @@ function BoardNodeCard({
       return
     }
     if (trimmedTitle !== node.title || notes !== node.notes) {
+      const current = useAppStore.getState().data
       await persist(
-        withBoardHistory(data, updateBoardNode(data, node.id, { title: trimmedTitle, notes }))
+        withBoardHistory(current, updateBoardNode(current, node.id, { title: trimmedTitle, notes }))
       )
     }
   }
@@ -170,8 +171,9 @@ function BoardNodeCard({
   const handlePickPhoto = async (): Promise<void> => {
     const picked = await window.tododesk.pickAttachmentFile()
     if (!picked) return
+    const current = useAppStore.getState().data
     await persist(
-      withBoardHistory(data, updateBoardNode(data, node.id, { imagePath: picked.filePath }))
+      withBoardHistory(current, updateBoardNode(current, node.id, { imagePath: picked.filePath }))
     )
   }
 
@@ -765,7 +767,8 @@ export default function BoardView(): JSX.Element {
         setSelectedNodeIds(new Set())
       }
       if (e.key === 'Delete' && selectedLinkId) {
-        void persistBoard(deleteBoardLink(data, selectedLinkId))
+        const current = useAppStore.getState().data
+        void persistBoard(deleteBoardLink(current, selectedLinkId))
         setSelectedLinkId(null)
       }
     }
@@ -778,7 +781,7 @@ export default function BoardView(): JSX.Element {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [data, persistBoard, selectedLinkId])
+  }, [persistBoard, selectedLinkId])
 
   useEffect(() => {
     const onFsChange = (): void => setFullscreen(Boolean(document.fullscreenElement))
@@ -1107,7 +1110,8 @@ export default function BoardView(): JSX.Element {
       return
     }
 
-    await persistBoard(addBoardLink(data, linkFromId, nodeId))
+    const current = useAppStore.getState().data
+    await persistBoard(addBoardLink(current, linkFromId, nodeId))
     setLinkFromId(null)
     setLinkMode(false)
     showHint('Связь создана')
@@ -1115,7 +1119,8 @@ export default function BoardView(): JSX.Element {
 
   const confirmPendingLink = async (): Promise<void> => {
     if (!pendingLink) return
-    await persistBoard(addBoardLink(data, pendingLink.fromNodeId, pendingLink.toNodeId))
+    const current = useAppStore.getState().data
+    await persistBoard(addBoardLink(current, pendingLink.fromNodeId, pendingLink.toNodeId))
     setPendingLink(null)
     setHint(null)
     showHint('Связь создана')
@@ -1145,19 +1150,22 @@ export default function BoardView(): JSX.Element {
   const handleAlignSelected = async (): Promise<void> => {
     if (selectedNodeIds.size < 2) return
     const primaryId = [...selectedNodeIds][0]
-    await persistBoard(alignBoardNodes(data, [...selectedNodeIds], primaryId))
+    const current = useAppStore.getState().data
+    await persistBoard(alignBoardNodes(current, [...selectedNodeIds], primaryId))
     showHint('Блоки выровнены')
   }
 
   const handleGridSelected = async (): Promise<void> => {
     if (selectedNodeIds.size < 2) return
-    await persistBoard(gridLayoutBoardNodes(data, [...selectedNodeIds]))
+    const current = useAppStore.getState().data
+    await persistBoard(gridLayoutBoardNodes(current, [...selectedNodeIds]))
     showHint('Блоки размещены сеткой')
   }
 
   const handleRestoreSnapshot = async (snapshotId: string): Promise<void> => {
     if (!snapshotId) return
-    await persistBoard(restoreBoardSnapshot(data, snapshotId))
+    const current = useAppStore.getState().data
+    await persistBoard(restoreBoardSnapshot(current, snapshotId))
     setSelectedNodeIds(new Set())
     setSelectedLinkId(null)
     showHint('Снимок восстановлен')
@@ -1176,7 +1184,8 @@ export default function BoardView(): JSX.Element {
   const addIdea = async (): Promise<void> => {
     const center = getViewportCenter()
     const node = createIdeaNode(center.x - 110, center.y - 65)
-    await persistBoard(addBoardNode(data, node))
+    const current = useAppStore.getState().data
+    await persistBoard(addBoardNode(current, node))
     setSelectedNodeIds(new Set([node.id]))
   }
 
@@ -1636,9 +1645,10 @@ export default function BoardView(): JSX.Element {
                 onActivate={(additive) => void handleNodeActivate(node.id, additive)}
                 onDelete={() => void deleteNode(node.id)}
                 onDragStart={handleNodeDragStart(node.id)}
-                onStyleChange={(style) =>
-                  void persistBoard(updateBoardNode(data, node.id, { style }))
-                }
+                onStyleChange={(style) => {
+                  const current = useAppStore.getState().data
+                  void persistBoard(updateBoardNode(current, node.id, { style }))
+                }}
                 onSubtaskClick={(taskId) => setSelectedTaskId(taskId)}
                 linkMode={linkMode}
               />
@@ -1677,7 +1687,10 @@ export default function BoardView(): JSX.Element {
         {selectedLinkId && (
           <button
             type="button"
-            onClick={() => void persistBoard(deleteBoardLink(data, selectedLinkId))}
+            onClick={() => {
+              const current = useAppStore.getState().data
+              void persistBoard(deleteBoardLink(current, selectedLinkId))
+            }}
             className="ml-3 text-red-400 hover:underline"
           >
             Удалить связь

@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import type { FontSize, Settings, Theme } from '../../../shared/schema'
+import { useEffect, useState } from 'react'
+import type { FontSize, ScheduledExportFormat, Settings, Theme } from '../../../shared/schema'
+import type { SyncStatusInfo } from '../../../shared/api'
 import { useAppStore } from '../store/useAppStore'
 import {
   ensureOverdueSmartRule,
@@ -36,6 +37,15 @@ export default function SettingsDialog({
   const settings = data.settings
   const [activityLogOpen, setActivityLogOpen] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
+  const [syncStatus, setSyncStatus] = useState<SyncStatusInfo | null>(null)
+
+  useEffect(() => {
+    void window.tododesk.getSyncStatus().then(setSyncStatus)
+    const timer = setInterval(() => {
+      void window.tododesk.getSyncStatus().then(setSyncStatus)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [settings.syncFolderPath, settings.syncAutoPushEnabled, settings.syncLastPushAt])
 
   const update = async (patch: Partial<Settings>): Promise<void> => {
     const current = useAppStore.getState().data
@@ -54,10 +64,16 @@ export default function SettingsDialog({
   }
 
   const handleSyncPush = async (): Promise<void> => {
-    const result = await window.tododesk.syncPushNow()
+    const current = useAppStore.getState().data
+    const result = await window.tododesk.syncPushNow(current)
     if (!result.ok) alert(result.error ?? 'Ошибка синхронизации')
-    else if (result.action === 'pushed') alert('Данные отправлены в папку синхронизации')
-    else if (result.action === 'unchanged') alert('Данные уже совпадают')
+    else {
+      const reloaded = await window.tododesk.reloadData()
+      setData(reloaded)
+      void window.tododesk.getSyncStatus().then(setSyncStatus)
+      if (result.action === 'pushed') alert('Данные отправлены в папку синхронизации')
+      else if (result.action === 'unchanged') alert('Данные уже совпадают')
+    }
   }
 
   const handleSyncPull = async (): Promise<void> => {
@@ -67,7 +83,7 @@ export default function SettingsDialog({
       return
     }
     if (result.action === 'pulled') {
-      setData(useAppStore.getState().data)
+      if (result.data) setData(result.data)
       alert('Данные получены из папки синхронизации')
     } else if (result.action === 'unchanged') alert('Данные уже совпадают')
   }
@@ -348,6 +364,37 @@ export default function SettingsDialog({
               <p className="mt-1 text-xs text-gray-500">
                 Следит за data.tododesk в указанной папке
               </p>
+              <label className="mt-3 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.syncAutoPushEnabled}
+                  onChange={(e) => void update({ syncAutoPushEnabled: e.target.checked })}
+                  disabled={!settings.syncFolderPath}
+                />
+                Автоотправка по таймеру
+              </label>
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <span className="text-gray-400">Интервал (мин):</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={settings.syncAutoPushIntervalMinutes}
+                  onChange={(e) =>
+                    void update({ syncAutoPushIntervalMinutes: Number(e.target.value) })
+                  }
+                  disabled={!settings.syncAutoPushEnabled}
+                  className="w-16 rounded-lg border border-surface-border bg-surface px-2 py-1 disabled:opacity-50"
+                />
+              </div>
+              {syncStatus && settings.syncFolderPath && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Статус: {syncStatus.message}
+                  {syncStatus.lastPushAt
+                    ? ` · ${new Date(syncStatus.lastPushAt).toLocaleString('ru-RU')}`
+                    : ''}
+                </p>
+              )}
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
@@ -366,6 +413,54 @@ export default function SettingsDialog({
                   Получить сейчас
                 </button>
               </div>
+            </div>
+
+            <div className="rounded-lg border border-surface-border p-3">
+              <p className="mb-2 text-sm font-medium">Плановый экспорт</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.scheduledExportEnabled}
+                  onChange={(e) => void update({ scheduledExportEnabled: e.target.checked })}
+                />
+                Ежедневный экспорт в папку
+              </label>
+              <input
+                type="text"
+                value={settings.scheduledExportPath ?? ''}
+                onChange={(e) =>
+                  void update({ scheduledExportPath: e.target.value.trim() || null })
+                }
+                placeholder="C:\Users\...\Backups\export"
+                className="mt-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-gray-400">Час:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={settings.scheduledExportHour}
+                  onChange={(e) => void update({ scheduledExportHour: Number(e.target.value) })}
+                  className="w-16 rounded-lg border border-surface-border bg-surface px-2 py-1"
+                />
+                <select
+                  value={settings.scheduledExportFormat}
+                  onChange={(e) =>
+                    void update({ scheduledExportFormat: e.target.value as ScheduledExportFormat })
+                  }
+                  className="rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm"
+                >
+                  <option value="tododesk">.tododesk</option>
+                  <option value="csv">CSV</option>
+                  <option value="both">Оба формата</option>
+                </select>
+              </div>
+              {settings.scheduledExportLastRunDate && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Последний экспорт: {settings.scheduledExportLastRunDate}
+                </p>
+              )}
             </div>
 
             <div className="rounded-lg border border-surface-border p-3">
