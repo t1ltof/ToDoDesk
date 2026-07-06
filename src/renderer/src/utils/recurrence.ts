@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { DataPayload, Recurrence, Task } from '../../../shared/schema'
+import { advanceMonthlyDueDate } from '../../../shared/dateAdvance'
 import { localDateKey } from './calendarUtils'
 import { syncReminder } from './taskHelpers'
 
@@ -24,11 +25,7 @@ function advanceDueDate(dueDate: string, recurrence: Recurrence): string {
   const date = new Date(`${dueDate}T12:00:00`)
   if (recurrence === 'daily') date.setDate(date.getDate() + 1)
   if (recurrence === 'weekly') date.setDate(date.getDate() + 7)
-  if (recurrence === 'monthly') {
-    const day = date.getDate()
-    date.setMonth(date.getMonth() + 1)
-    if (date.getDate() < day) date.setDate(0)
-  }
+  if (recurrence === 'monthly') return advanceMonthlyDueDate(dueDate)
   if (recurrence === 'weekdays') advanceToNextWeekday(date)
   if (recurrence === 'weekends') advanceToNextWeekend(date)
   return localDateKey(date)

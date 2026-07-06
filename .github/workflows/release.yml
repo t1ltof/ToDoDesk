@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.LOCALAPPDATA }}/electron/Cache
+            ${{ env.USERPROFILE }}/.cache/electron
+          key: electron-${{ hashFiles('package-lock.json') }}
+
+      - run: npm ci
+
+      - name: Restore win-unpacked bootstrap
+        continue-on-error: true
+        run: |
+          gh release download v0.8.1 --repo ${{ github.repository }} -p ToDoDesk-win-unpacked-bootstrap.zip -D release-bootstrap
+          Expand-Archive -Path release-bootstrap/ToDoDesk-win-unpacked-bootstrap.zip -DestinationPath release -Force
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build portable
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Package bootstrap for next release
+        run: npm run dist:bootstrap
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/ToDoDesk-*-portable.exe
+            release/ToDoDesk-win-unpacked-bootstrap.zip

@@ -1,5 +1,5 @@
 import { Download, X } from 'lucide-react'
-import type { UpdateInfo } from '../../../preload/index'
+import type { UpdateInfo } from '../../../shared/api'
 import { useAppStore } from '../store/useAppStore'
 
 interface UpdateBannerProps {
@@ -8,14 +8,15 @@ interface UpdateBannerProps {
 }
 
 export default function UpdateBanner({ info, onDismiss }: UpdateBannerProps): JSX.Element {
-  const { data, persist } = useAppStore()
+  const { persist } = useAppStore()
 
   const dismiss = async (): Promise<void> => {
     if (info.latestVersion) {
+      const current = useAppStore.getState().data
       await persist({
-        ...data,
+        ...current,
         settings: {
-          ...data.settings,
+          ...current.settings,
           dismissedUpdateVersion: info.latestVersion,
           lastUpdateCheck: new Date().toISOString()
         }

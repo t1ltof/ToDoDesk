@@ -2,11 +2,11 @@
 
 Десктопный планировщик рабочих задач для личного использования (Windows, portable).
 
-**Актуальная версия:** [0.8.1](https://github.com/t1ltof/ToDoDesk/releases/latest) · формат данных **1.4**
+**Актуальная версия:** [0.8.1](https://github.com/t1ltof/ToDoDesk/releases/latest) (stable) · **0.9.0** в разработке · формат данных **1.4**
 
 ## Скачать
 
-[ToDoDesk-0.8.1-portable.exe](https://github.com/t1ltof/ToDoDesk/releases/download/v0.8.1/ToDoDesk-0.8.1-portable.exe) — скачать, запустить, готово.
+[ToDoDesk-0.8.1-portable.exe](https://github.com/t1ltof/ToDoDesk/releases/download/v0.8.1/ToDoDesk-0.8.1-portable.exe) — последний стабильный релиз.
 
 Данные (`data.tododesk`, бэкапы, вложения) сохраняются **рядом с `.exe`**. В режиме разработки — в папке `data-dev/`.
 
@@ -108,6 +108,17 @@ npm run dist
 npm run dist:full
 ```
 
+Для CI и новых машин: после первой сборки создайте bootstrap-архив `npm run dist:bootstrap` и приложите `ToDoDesk-win-unpacked-bootstrap.zip` к релизу на GitHub.
+
+### Тестирование
+
+```bash
+npm test
+npm run typecheck
+```
+
+Чеклист перед релизом: [TESTING.md](TESTING.md)
+
 ## Стек
 
 - Electron + React + TypeScript
@@ -119,6 +130,7 @@ npm run dist:full
 
 | Версия | Основное |
 |--------|----------|
+| 0.9.0 (dev) | CI, тесты, sync push/pull, умные правила в UI, Kanban drag, поиск на доске |
 | [0.8.1](https://github.com/t1ltof/ToDoDesk/releases/tag/v0.8.1) | Исправления целостности данных, синхронизации, безопасности (патч) |
 | [0.8.0](https://github.com/t1ltof/ToDoDesk/releases/tag/v0.8.0) | Командная палитра, таймлайн, спринты, Markdown, вложения, доска v2 |
 | [0.7.0](https://github.com/t1ltof/ToDoDesk/releases/tag/v0.7.0) | Доска, мультивыделение, темы, шифрование, синхронизация |

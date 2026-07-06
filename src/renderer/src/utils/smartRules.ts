@@ -48,6 +48,32 @@ export function applySmartRules(data: DataPayload): DataPayload {
   return next
 }
 
+export function toggleSmartRule(
+  data: DataPayload,
+  ruleId: string,
+  enabled: boolean
+): DataPayload {
+  return {
+    ...data,
+    smartRules: data.smartRules.map((rule) =>
+      rule.id === ruleId ? { ...rule, enabled } : rule
+    )
+  }
+}
+
+export function updateSmartRuleDays(
+  data: DataPayload,
+  ruleId: string,
+  days: number
+): DataPayload {
+  return {
+    ...data,
+    smartRules: data.smartRules.map((rule) =>
+      rule.id === ruleId ? { ...rule, days: Math.max(1, days) } : rule
+    )
+  }
+}
+
 export function ensureOverdueSmartRule(data: DataPayload): DataPayload {
   if (data.smartRules.length > 0) return data
 

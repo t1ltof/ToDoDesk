@@ -625,6 +625,7 @@ export default function BoardView(): JSX.Element {
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [backgroundMenuOpen, setBackgroundMenuOpen] = useState(false)
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all')
+  const [boardSearch, setBoardSearch] = useState('')
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 })
   const [pendingLink, setPendingLink] = useState<{ fromNodeId: string; toNodeId: string } | null>(
     null
@@ -646,18 +647,28 @@ export default function BoardView(): JSX.Element {
   const allNodes = data.boardNodes
 
   const filteredNodes = useMemo(() => {
-    if (boardFilter === 'all') return allNodes
-    if (boardFilter.startsWith('project:')) {
-      return filterBoardNodes(allNodes, data.tasks, data.taskTags, {
-        type: 'project',
-        projectId: boardFilter.replace('project:', '')
-      })
+    let nodes = allNodes
+    if (boardFilter !== 'all') {
+      if (boardFilter.startsWith('project:')) {
+        nodes = filterBoardNodes(allNodes, data.tasks, data.taskTags, {
+          type: 'project',
+          projectId: boardFilter.replace('project:', '')
+        })
+      } else {
+        nodes = filterBoardNodes(allNodes, data.tasks, data.taskTags, {
+          type: 'tag',
+          tagId: boardFilter.replace('tag:', '')
+        })
+      }
     }
-    return filterBoardNodes(allNodes, data.tasks, data.taskTags, {
-      type: 'tag',
-      tagId: boardFilter.replace('tag:', '')
-    })
-  }, [allNodes, boardFilter, data.tasks, data.taskTags])
+    const q = boardSearch.trim().toLowerCase()
+    if (!q) return nodes
+    return nodes.filter(
+      (node) =>
+        node.title.toLowerCase().includes(q) ||
+        node.notes.toLowerCase().includes(q)
+    )
+  }, [allNodes, boardFilter, boardSearch, data.tasks, data.taskTags])
 
   const visibleNodeIds = useMemo(() => new Set(filteredNodes.map((n) => n.id)), [filteredNodes])
   const links = data.boardLinks.filter(
@@ -1183,17 +1194,19 @@ export default function BoardView(): JSX.Element {
   }
 
   const addTask = async (task: Task): Promise<void> => {
+    const current = useAppStore.getState().data
     const center = getViewportCenter()
-    const color = getProjectColor(data.projects, task.projectId)
+    const color = getProjectColor(current.projects, task.projectId)
     const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color)
-    await persistBoard(addBoardNode(data, node))
+    await persistBoard(addBoardNode(current, node))
     setAddTaskOpen(false)
     setSelectedNodeIds(new Set([node.id]))
   }
 
   const addNewTask = async (title: string, projectId: string | null): Promise<void> => {
+    const current = useAppStore.getState().data
     const center = getViewportCenter()
-    let next = createRootTask(data, { title, projectId, dueDate: null })
+    let next = createRootTask(current, { title, projectId, dueDate: null })
     const task = next.tasks[next.tasks.length - 1]
     const color = getProjectColor(next.projects, projectId)
     const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color)
@@ -1221,7 +1234,8 @@ export default function BoardView(): JSX.Element {
   }
 
   const deleteNode = async (nodeId: string): Promise<void> => {
-    await persistBoard(deleteBoardNode(data, nodeId))
+    const current = useAppStore.getState().data
+    await persistBoard(deleteBoardNode(current, nodeId))
     setSelectedNodeIds((prev) => {
       if (!prev.has(nodeId)) return prev
       const next = new Set(prev)
@@ -1280,6 +1294,14 @@ export default function BoardView(): JSX.Element {
             )}
           </select>
         </div>
+
+        <input
+          type="search"
+          value={boardSearch}
+          onChange={(e) => setBoardSearch(e.target.value)}
+          placeholder="Поиск блоков..."
+          className="w-40 rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
+        />
 
         <button
           type="button"

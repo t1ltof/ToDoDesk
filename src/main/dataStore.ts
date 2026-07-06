@@ -27,7 +27,7 @@ import { readDataFileContent } from './dataFileIO'
 import { markSyncWrite } from './syncWatcher'
 import type { BoardLink, BoardNode } from '../shared/schema'
 
-const APP_VERSION = '0.8.1'
+const APP_VERSION = '0.9.0'
 
 export class DataLoadError extends Error {
   readonly needsPassword: boolean

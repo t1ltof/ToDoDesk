@@ -1,4 +1,5 @@
 import { Columns3, List, Search } from 'lucide-react'
+import { useState } from 'react'
 import type { ViewId } from '../../../shared/schema'
 import { filterTasksForView, useAppStore } from '../store/useAppStore'
 import { completeTask, reopenTask } from '../utils/recurrence'
@@ -11,6 +12,8 @@ interface KanbanViewProps {
 export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
   const { data, persist, setSelectedTaskId, searchQuery, setSearchQuery, setActiveView } =
     useAppStore()
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<'todo' | 'done' | null>(null)
   const projectId = view.replace('kanban:', '')
   const projectListView = `project:${projectId}` as ViewId
   const project = data.projects.find((p) => p.id === projectId)
@@ -28,29 +31,66 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
       matchesSearch(t.title, t.description)
   )
 
-  const toggle = async (taskId: string, done: boolean): Promise<void> => {
+  const moveTask = async (taskId: string, target: 'todo' | 'done'): Promise<void> => {
     const current = useAppStore.getState().data
-    await persist(done ? reopenTask(current, taskId) : completeTask(current, taskId))
+    const task = current.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    if (target === 'done' && task.status === 'todo') {
+      await persist(completeTask(current, taskId))
+    } else if (target === 'todo' && task.status === 'done') {
+      await persist(reopenTask(current, taskId))
+    }
+  }
+
+  const toggle = async (taskId: string, done: boolean): Promise<void> => {
+    await moveTask(taskId, done ? 'todo' : 'done')
   }
 
   const Column = ({
     title,
     tasks,
-    done
+    done,
+    columnId
   }: {
     title: string
     tasks: typeof todoTasks
     done: boolean
+    columnId: 'todo' | 'done'
   }) => (
-    <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-surface-border bg-surface-elevated">
+    <div
+      className={clsx(
+        'flex min-h-0 flex-1 flex-col rounded-xl border bg-surface-elevated transition',
+        dropTarget === columnId ? 'border-accent' : 'border-surface-border'
+      )}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDropTarget(columnId)
+      }}
+      onDragLeave={() => setDropTarget((prev) => (prev === columnId ? null : prev))}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDropTarget(null)
+        if (draggingTaskId) void moveTask(draggingTaskId, columnId)
+        setDraggingTaskId(null)
+      }}
+    >
       <div className="border-b border-surface-border px-4 py-3 font-medium">{title}</div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {tasks.map((task) => (
           <button
             key={task.id}
             type="button"
+            draggable
+            onDragStart={() => setDraggingTaskId(task.id)}
+            onDragEnd={() => {
+              setDraggingTaskId(null)
+              setDropTarget(null)
+            }}
             onClick={() => setSelectedTaskId(task.id)}
-            className="w-full rounded-lg border border-surface-border bg-surface p-3 text-left text-sm hover:border-accent"
+            className={clsx(
+              'w-full cursor-grab rounded-lg border border-surface-border bg-surface p-3 text-left text-sm hover:border-accent active:cursor-grabbing',
+              draggingTaskId === task.id && 'opacity-50'
+            )}
           >
             <div className="flex items-start gap-2">
               <input
@@ -72,7 +112,7 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
       <header className="flex items-center justify-between border-b border-surface-border px-6 py-4">
         <div>
           <h2 className="text-xl font-semibold">{project?.name ?? 'Проект'}</h2>
-          <p className="text-sm text-gray-400">Kanban</p>
+          <p className="text-sm text-gray-400">Kanban — перетащите карточку между колонками</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-surface-border">
@@ -104,8 +144,8 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
         </div>
       </header>
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
-        <Column title={`К выполнению (${todoTasks.length})`} tasks={todoTasks} done={false} />
-        <Column title={`Выполнено (${doneTasks.length})`} tasks={doneTasks} done={true} />
+        <Column title={`К выполнению (${todoTasks.length})`} tasks={todoTasks} done={false} columnId="todo" />
+        <Column title={`Выполнено (${doneTasks.length})`} tasks={doneTasks} done={true} columnId="done" />
       </div>
     </section>
   )

@@ -1,89 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ImportPreview } from '../shared/import'
-import type { DataPayload } from '../shared/schema'
-import type { SyncConflictChoice, SyncConflictPayload } from '../shared/sync'
+import type { ToDoDeskApi } from '../shared/api'
 
-export interface UpdateInfo {
-  hasUpdate: boolean
-  currentVersion: string
-  latestVersion: string | null
-  url: string | null
-  error: string | null
-}
-
-export interface ImportResult {
-  ok: boolean
-  data?: DataPayload
-  error?: string
-}
-
-export interface ExportReport {
-  exportedAt: string
-  appVersion: string
-  formatVersion: string
-  projectCount: number
-  taskCount: number
-  doneCount: number
-  tagCount: number
-  templateCount: number
-  projectTemplateCount: number
-  noteCount: number
-  boardNodeCount: number
-  activityLogCount: number
-}
-
-export interface ExportResult {
-  data: DataPayload
-  report: ExportReport
-}
-
-export interface CsvExportResult {
-  path: string
-  rowCount: number
-}
-
-export type ImportMode = 'replace' | 'new-project' | 'merge'
-
-export interface StoredAttachment {
-  fileName: string
-  filePath: string
-}
-
-export interface DataLoadFailedPayload {
-  message: string
-  needsPassword: boolean
-}
-
-export interface SaveDataOptions {
-  clearUnsaved?: boolean
-}
-
-export interface ToDoDeskApi {
-  loadData: () => Promise<DataPayload>
-  reloadData: () => Promise<DataPayload>
-  saveData: (data: DataPayload, options?: SaveDataOptions) => Promise<DataPayload>
-  pickAttachmentFile: () => Promise<StoredAttachment | null>
-  copyAttachmentFile: (sourcePath: string, fileName?: string) => Promise<StoredAttachment>
-  openAttachmentPath: (filePath: string) => Promise<void>
-  deleteAttachmentFile: (filePath: string) => Promise<void>
-  exportData: (mergeWithCurrent?: boolean) => Promise<ExportResult | null>
-  exportCsv: () => Promise<CsvExportResult | null>
-  exportReport: () => Promise<ExportReport>
-  pickImportFile: () => Promise<ImportPreview | null>
-  importFile: (filePath: string, mode: ImportMode) => Promise<ImportResult>
-  setDataPassword: (password: string | null) => Promise<boolean>
-  setUnsavedChanges: (hasUnsaved: boolean) => Promise<void>
-  resolveSyncConflict: (choice: SyncConflictChoice) => Promise<DataPayload | null>
-  checkUpdates: () => Promise<UpdateInfo>
-  openUpdateUrl: (url: string) => Promise<void>
-  onDataUpdated: (callback: (data: DataPayload) => void) => () => void
-  onDataLoadFailed: (callback: (payload: DataLoadFailedPayload) => void) => () => void
-  onQuickAdd: (callback: () => void) => () => void
-  onOpenTask: (callback: (taskId: string) => void) => () => void
-  onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void
-  onSyncConflict: (callback: (payload: SyncConflictPayload) => void) => () => void
-  onNotification: (callback: () => void) => () => void
-}
+export type {
+  CsvExportResult,
+  DataLoadFailedPayload,
+  ExportReport,
+  ExportResult,
+  ImportMode,
+  ImportResult,
+  SaveDataOptions,
+  StoredAttachment,
+  SyncNowResult,
+  ToDoDeskApi,
+  UpdateInfo
+} from '../shared/api'
 
 const api: ToDoDeskApi = {
   loadData: () => ipcRenderer.invoke('data:load'),
@@ -101,43 +31,43 @@ const api: ToDoDeskApi = {
   importFile: (filePath, mode) => ipcRenderer.invoke('data:import-file', filePath, mode),
   setDataPassword: (password) => ipcRenderer.invoke('security:set-password', password),
   setUnsavedChanges: (hasUnsaved) => ipcRenderer.invoke('sync:set-unsaved', hasUnsaved),
+  syncPushNow: () => ipcRenderer.invoke('sync:push-now'),
+  syncPullNow: () => ipcRenderer.invoke('sync:pull-now'),
   resolveSyncConflict: (choice) => ipcRenderer.invoke('sync:resolve', choice),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
   openUpdateUrl: (url) => ipcRenderer.invoke('updates:open', url),
   onDataUpdated: (callback) => {
-    const listener = (_: Electron.IpcRendererEvent, data: DataPayload): void => callback(data)
+    const listener = (_: Electron.IpcRendererEvent, data) => callback(data)
     ipcRenderer.on('data:updated', listener)
     return () => ipcRenderer.removeListener('data:updated', listener)
   },
   onDataLoadFailed: (callback) => {
-    const listener = (_: Electron.IpcRendererEvent, payload: DataLoadFailedPayload): void =>
-      callback(payload)
+    const listener = (_: Electron.IpcRendererEvent, payload) => callback(payload)
     ipcRenderer.on('data:load-failed', listener)
     return () => ipcRenderer.removeListener('data:load-failed', listener)
   },
   onQuickAdd: (callback) => {
-    const listener = (): void => callback()
+    const listener = () => callback()
     ipcRenderer.on('app:quick-add', listener)
     return () => ipcRenderer.removeListener('app:quick-add', listener)
   },
   onOpenTask: (callback) => {
-    const listener = (_: Electron.IpcRendererEvent, taskId: string): void => callback(taskId)
+    const listener = (_: Electron.IpcRendererEvent, taskId: string) => callback(taskId)
     ipcRenderer.on('app:open-task', listener)
     return () => ipcRenderer.removeListener('app:open-task', listener)
   },
   onUpdateAvailable: (callback) => {
-    const listener = (_: Electron.IpcRendererEvent, info: UpdateInfo): void => callback(info)
+    const listener = (_: Electron.IpcRendererEvent, info) => callback(info)
     ipcRenderer.on('app:update-available', listener)
     return () => ipcRenderer.removeListener('app:update-available', listener)
   },
   onSyncConflict: (callback) => {
-    const listener = (_: Electron.IpcRendererEvent, payload: SyncConflictPayload): void =>
-      callback(payload)
+    const listener = (_: Electron.IpcRendererEvent, payload) => callback(payload)
     ipcRenderer.on('sync:conflict', listener)
     return () => ipcRenderer.removeListener('sync:conflict', listener)
   },
   onNotification: (callback) => {
-    const listener = (): void => callback()
+    const listener = () => callback()
     ipcRenderer.on('app:notification', listener)
     return () => ipcRenderer.removeListener('app:notification', listener)
   }

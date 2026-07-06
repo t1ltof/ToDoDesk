@@ -26,6 +26,8 @@ import { getIconPath } from './resources'
 import { createTray, destroyTray, updateTrayTooltip } from './tray'
 import { checkForUpdates } from './updates'
 import {
+  pullSyncNow,
+  pushSyncNow,
   resolveSyncConflict,
   setSyncConflictHandlers,
   startSyncWatcher,
@@ -41,6 +43,12 @@ let isQuitting = false
 let reminderTimer: NodeJS.Timeout | null = null
 let hasUnsavedChanges = false
 let lastSyncFolderPath: string | null | undefined
+
+function updateWindowTitle(): void {
+  if (!mainWindow) return
+  const base = isDev ? 'ToDoDesk — Разработка' : 'ToDoDesk'
+  mainWindow.setTitle(hasUnsavedChanges ? `${base} *` : base)
+}
 
 function getWindow(): BrowserWindow | null {
   return mainWindow
@@ -173,7 +181,10 @@ if (!gotLock) {
         const data = 'data' in payload ? payload.data : payload
         const clearUnsaved = 'data' in payload ? payload.clearUnsaved !== false : false
         saveData(data)
-        if (clearUnsaved) hasUnsavedChanges = false
+        if (clearUnsaved) {
+          hasUnsavedChanges = false
+          updateWindowTitle()
+        }
         applySettings(data)
         updateTrayTooltip(data)
         return data
@@ -204,6 +215,22 @@ if (!gotLock) {
 
     ipcMain.handle('sync:set-unsaved', (_, value: boolean) => {
       hasUnsavedChanges = value
+      updateWindowTitle()
+    })
+
+    ipcMain.handle('sync:push-now', () => {
+      const data = loadData()
+      return pushSyncNow(data.settings.syncFolderPath)
+    })
+
+    ipcMain.handle('sync:pull-now', () => {
+      const data = loadData()
+      const result = pullSyncNow(data.settings.syncFolderPath)
+      if (result.ok && result.data) {
+        applySettings(result.data)
+        broadcastData(result.data)
+      }
+      return result
     })
 
     ipcMain.handle('sync:resolve', (_, choice: SyncConflictChoice) => {

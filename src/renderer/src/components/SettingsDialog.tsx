@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import type { FontSize, Settings, Theme } from '../../../shared/schema'
 import { useAppStore } from '../store/useAppStore'
+import {
+  ensureOverdueSmartRule,
+  toggleSmartRule,
+  updateSmartRuleDays
+} from '../utils/smartRules'
 import ActivityLogDialog from './ActivityLogDialog'
 import clsx from 'clsx'
 
@@ -33,10 +38,38 @@ export default function SettingsDialog({
   const [passwordInput, setPasswordInput] = useState('')
 
   const update = async (patch: Partial<Settings>): Promise<void> => {
+    const current = useAppStore.getState().data
     await persist({
-      ...data,
-      settings: { ...settings, ...patch }
+      ...current,
+      settings: { ...current.settings, ...patch }
     })
+  }
+
+  const updateSmartRules = async (
+    updater: (payload: ReturnType<typeof useAppStore.getState>['data']) => ReturnType<typeof useAppStore.getState>['data']
+  ): Promise<void> => {
+    const current = useAppStore.getState().data
+    const withDefaults = ensureOverdueSmartRule(current)
+    await persist(updater(withDefaults))
+  }
+
+  const handleSyncPush = async (): Promise<void> => {
+    const result = await window.tododesk.syncPushNow()
+    if (!result.ok) alert(result.error ?? 'Ошибка синхронизации')
+    else if (result.action === 'pushed') alert('Данные отправлены в папку синхронизации')
+    else if (result.action === 'unchanged') alert('Данные уже совпадают')
+  }
+
+  const handleSyncPull = async (): Promise<void> => {
+    const result = await window.tododesk.syncPullNow()
+    if (!result.ok) {
+      if (!result.error?.includes('диалоге')) alert(result.error ?? 'Ошибка синхронизации')
+      return
+    }
+    if (result.action === 'pulled') {
+      setData(useAppStore.getState().data)
+      alert('Данные получены из папки синхронизации')
+    } else if (result.action === 'unchanged') alert('Данные уже совпадают')
   }
 
   const handlePasswordToggle = async (enabled: boolean): Promise<void> => {
@@ -315,6 +348,79 @@ export default function SettingsDialog({
               <p className="mt-1 text-xs text-gray-500">
                 Следит за data.tododesk в указанной папке
               </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSyncPush()}
+                  disabled={!settings.syncFolderPath}
+                  className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-gray-300 hover:bg-surface disabled:opacity-40"
+                >
+                  Отправить сейчас
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSyncPull()}
+                  disabled={!settings.syncFolderPath}
+                  className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-gray-300 hover:bg-surface disabled:opacity-40"
+                >
+                  Получить сейчас
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-surface-border p-3">
+              <p className="mb-2 text-sm font-medium">Умные правила</p>
+              <p className="mb-3 text-xs text-gray-500">
+                Автоматически применяются при запуске. Изменения сохраняются в настройках.
+              </p>
+              <div className="space-y-2">
+                {ensureOverdueSmartRule(data).smartRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="flex flex-wrap items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm"
+                  >
+                    <label className="flex flex-1 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        onChange={(e) =>
+                          void updateSmartRules((next) =>
+                            toggleSmartRule(next, rule.id, e.target.checked)
+                          )
+                        }
+                      />
+                      <span>{rule.name}</span>
+                    </label>
+                    <label className="flex items-center gap-1 text-xs text-gray-400">
+                      дней:
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={rule.days}
+                        onChange={(e) =>
+                          void updateSmartRules((next) =>
+                            updateSmartRuleDays(next, rule.id, Number(e.target.value))
+                          )
+                        }
+                        className="w-14 rounded border border-surface-border bg-surface-elevated px-1 py-0.5"
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-surface-border p-3">
+              <p className="mb-2 text-sm font-medium">Горячие клавиши</p>
+              <ul className="space-y-1 text-xs text-gray-400">
+                <li>Ctrl+Shift+T — быстрое добавление (глобально)</li>
+                <li>Ctrl+N — быстрое добавление</li>
+                <li>Ctrl+K — командная палитра</li>
+                <li>Ctrl+F — глобальный поиск</li>
+                <li>Ctrl+Shift+V — вставить задачи из буфера</li>
+                <li>Ctrl+Z — отмена · Ctrl+1–7 — виды · / — поиск · Delete — удалить задачу</li>
+              </ul>
             </div>
 
             <div className="rounded-lg border border-surface-border p-3">

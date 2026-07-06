@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { UpdateInfo } from '../../preload/index'
+import type { UpdateInfo } from '../../shared/api'
 import type { SyncConflictPayload } from '../../shared/sync'
 import type { ViewId } from '../../shared/schema'
 import CalendarView from './components/CalendarView'
@@ -75,7 +75,7 @@ export default function App(): JSX.Element {
       if (JSON.stringify(applied) !== JSON.stringify(currentData)) {
         useAppStore.getState().setData(applied)
       } else if (withRules.smartRules.length !== currentData.smartRules.length) {
-        useAppStore.getState().setData(withRules)
+        void useAppStore.getState().persist(withRules)
       }
     }, 1500)
 

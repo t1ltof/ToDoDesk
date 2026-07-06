@@ -1,6 +1,6 @@
 {
   "name": "tododesk",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Десктопный планировщик задач для Windows (portable). Electron + React + TypeScript.",
   "main": "./out/main/index.js",
   "author": "t1ltof",
@@ -12,6 +12,8 @@
     "preview": "electron-vite preview",
     "dist": "node scripts/dist.mjs",
     "dist:full": "npm run build && electron-builder --win portable",
+    "dist:bootstrap": "node scripts/package-bootstrap.mjs",
+    "test": "node --experimental-strip-types --test tests/migrate.test.ts tests/encryption.test.ts tests/recurrence.test.ts tests/taskHelpers.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
