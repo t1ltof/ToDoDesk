@@ -1,7 +1,7 @@
 {
   "name": "tododesk",
   "version": "0.8.1",
-  "description": "Десктопный планировщик рабочих задач для личного использования",
+  "description": "Десктопный планировщик задач для Windows (portable). Electron + React + TypeScript.",
   "main": "./out/main/index.js",
   "author": "t1ltof",
   "license": "MIT",
