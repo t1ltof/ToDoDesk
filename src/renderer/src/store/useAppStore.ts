@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+
+let recentTaskPersistTimer: ReturnType<typeof setTimeout> | null = null
 import type {
   DataPayload,
   Project,
@@ -33,7 +35,7 @@ interface AppState {
   clearBulkSelection: () => void
   setData: (data: DataPayload) => void
   load: () => Promise<void>
-  persist: (data: DataPayload) => Promise<void>
+  persist: (data: DataPayload, options?: { clearUnsaved?: boolean }) => Promise<void>
   undo: () => Promise<void>
 }
 
@@ -61,7 +63,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (taskId) void get().trackRecentTask(taskId)
   },
   trackRecentTask: async (taskId) => {
-    const { data, persist } = get()
+    const { data } = get()
     const current = data.settings.recentTaskIds
     const recentTaskIds = [taskId, ...current.filter((id) => id !== taskId)].slice(0, 10)
     if (
@@ -70,10 +72,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     ) {
       return
     }
-    await persist({
-      ...data,
-      settings: { ...data.settings, recentTaskIds }
+    set({
+      data: {
+        ...data,
+        settings: { ...data.settings, recentTaskIds }
+      }
     })
+    if (recentTaskPersistTimer) clearTimeout(recentTaskPersistTimer)
+    recentTaskPersistTimer = setTimeout(() => {
+      void get().persist(get().data)
+    }, 3000)
   },
   setBulkSelectedTaskIds: (taskIds) => set({ bulkSelectedTaskIds: taskIds }),
   toggleBulkSelectedTaskId: (taskId) => {
@@ -92,17 +100,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ data, loading: false })
   },
 
-  persist: async (data) => {
+  persist: async (data, options?: { clearUnsaved?: boolean }) => {
     const current = get().data
     set({ undoSnapshot: structuredClone(current) })
-    const saved = await window.tododesk.saveData(data)
+    const saved = await window.tododesk.saveData(data, { clearUnsaved: options?.clearUnsaved })
     set({ data: saved })
   },
 
   undo: async () => {
     const snapshot = get().undoSnapshot
     if (!snapshot) return
-    const saved = await window.tododesk.saveData(snapshot)
+    const saved = await window.tododesk.saveData(snapshot, { clearUnsaved: true })
     set({ data: saved, undoSnapshot: null })
   }
 }))

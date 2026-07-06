@@ -20,7 +20,9 @@ function reminderForDueDate(dueDate: string): string {
 }
 
 export function syncReminder(data: DataPayload, taskId: string, dueDate: string | null): DataPayload {
-  const others = data.reminders.filter((item) => item.taskId !== taskId)
+  const others = data.reminders.filter(
+    (item) => item.taskId !== taskId || item.kind !== 'dueDate'
+  )
 
   if (!dueDate) {
     return { ...data, reminders: others }
@@ -30,8 +32,46 @@ export function syncReminder(data: DataPayload, taskId: string, dueDate: string 
     ...data,
     reminders: [
       ...others,
-      { id: uuidv4(), taskId, remindAt: reminderForDueDate(dueDate) }
+      { id: uuidv4(), taskId, remindAt: reminderForDueDate(dueDate), kind: 'dueDate' as const }
     ]
+  }
+}
+
+function wouldCreateDependencyCycle(
+  data: DataPayload,
+  taskId: string,
+  dependsOnTaskId: string | null
+): boolean {
+  if (!dependsOnTaskId) return false
+
+  const visited = new Set<string>()
+  let current: string | null = dependsOnTaskId
+
+  while (current) {
+    if (current === taskId) return true
+    if (visited.has(current)) return false
+    visited.add(current)
+    const task = data.tasks.find((item) => item.id === current)
+    current = task?.dependsOnTaskId ?? null
+  }
+
+  return false
+}
+
+function pruneBoardForTaskIds(data: DataPayload, taskIds: Set<string>): DataPayload {
+  const removedNodeIds = new Set(
+    data.boardNodes
+      .filter((node) => node.taskId && taskIds.has(node.taskId))
+      .map((node) => node.id)
+  )
+
+  return {
+    ...data,
+    boardNodes: data.boardNodes.filter((node) => !removedNodeIds.has(node.id)),
+    boardLinks: data.boardLinks.filter(
+      (link) => !removedNodeIds.has(link.fromNodeId) && !removedNodeIds.has(link.toNodeId)
+    ),
+    drafts: data.drafts.filter((draft) => !taskIds.has(draft.entityId))
   }
 }
 
@@ -59,7 +99,7 @@ export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
     void window.tododesk.deleteAttachmentFile(attachment.filePath)
   }
 
-  return {
+  const next = {
     ...data,
     tasks: data.tasks.filter((task) => !ids.has(task.id)),
     taskTags: data.taskTags.filter((link) => !ids.has(link.taskId)),
@@ -71,6 +111,8 @@ export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
       taskIds: sprint.taskIds.filter((id) => !ids.has(id))
     }))
   }
+
+  return pruneBoardForTaskIds(next, ids)
 }
 
 export function updateTask(
@@ -102,6 +144,10 @@ export function updateTask(
   )
 
   let next: DataPayload = { ...data, tasks: updatedTasks }
+
+  if ('dependsOnTaskId' in patch && wouldCreateDependencyCycle(next, taskId, patch.dependsOnTaskId ?? null)) {
+    return data
+  }
 
   if ('dueDate' in patch) {
     next = syncReminder(next, taskId, patch.dueDate ?? null)
@@ -245,13 +291,20 @@ export function setTaskPriority(data: DataPayload, taskId: string, priority: Pri
 export function clearCompletedTasks(data: DataPayload): DataPayload {
   const doneIds = new Set(data.tasks.filter((task) => task.status === 'done').map((task) => task.id))
 
-  return {
+  const next = {
     ...data,
     tasks: data.tasks.filter((task) => !doneIds.has(task.id)),
     taskTags: data.taskTags.filter((link) => !doneIds.has(link.taskId)),
     checklistItems: data.checklistItems.filter((item) => !doneIds.has(item.taskId)),
-    reminders: data.reminders.filter((item) => !doneIds.has(item.taskId))
+    reminders: data.reminders.filter((item) => !doneIds.has(item.taskId)),
+    taskAttachments: data.taskAttachments.filter((item) => !doneIds.has(item.taskId)),
+    sprints: data.sprints.map((sprint) => ({
+      ...sprint,
+      taskIds: sprint.taskIds.filter((id) => !doneIds.has(id))
+    }))
   }
+
+  return pruneBoardForTaskIds(next, doneIds)
 }
 
 export function reorderTasks(data: DataPayload, orderedIds: string[]): DataPayload {
@@ -270,6 +323,6 @@ export function addReminderInHours(data: DataPayload, taskId: string, hours: num
 
   return {
     ...data,
-    reminders: [...data.reminders, { id: uuidv4(), taskId, remindAt }]
+    reminders: [...data.reminders, { id: uuidv4(), taskId, remindAt, kind: 'custom' as const }]
   }
 }

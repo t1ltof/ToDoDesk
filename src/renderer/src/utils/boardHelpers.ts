@@ -69,7 +69,8 @@ export function createIdeaNode(x: number, y: number, title = 'Новая иде�
     height: DEFAULT_NODE_HEIGHT,
     color: '#d97706',
     style: 'card',
-    groupId: null
+    groupId: null,
+    imagePath: null
   }
 }
 
@@ -92,7 +93,8 @@ export function createTaskNode(
     height: DEFAULT_NODE_HEIGHT,
     color,
     style: 'card',
-    groupId: null
+    groupId: null,
+    imagePath: null
   }
 }
 
@@ -125,7 +127,7 @@ export function updateBoardNode(
   patch: Partial<
     Pick<
       BoardNode,
-      'title' | 'notes' | 'x' | 'y' | 'width' | 'height' | 'color' | 'style' | 'groupId'
+      'title' | 'notes' | 'x' | 'y' | 'width' | 'height' | 'color' | 'style' | 'groupId' | 'imagePath'
     >
   >
 ): DataPayload {

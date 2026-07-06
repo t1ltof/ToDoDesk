@@ -49,9 +49,19 @@ export interface StoredAttachment {
   filePath: string
 }
 
+export interface DataLoadFailedPayload {
+  message: string
+  needsPassword: boolean
+}
+
+export interface SaveDataOptions {
+  clearUnsaved?: boolean
+}
+
 export interface ToDoDeskApi {
   loadData: () => Promise<DataPayload>
-  saveData: (data: DataPayload) => Promise<DataPayload>
+  reloadData: () => Promise<DataPayload>
+  saveData: (data: DataPayload, options?: SaveDataOptions) => Promise<DataPayload>
   pickAttachmentFile: () => Promise<StoredAttachment | null>
   copyAttachmentFile: (sourcePath: string, fileName?: string) => Promise<StoredAttachment>
   openAttachmentPath: (filePath: string) => Promise<void>
@@ -67,6 +77,7 @@ export interface ToDoDeskApi {
   checkUpdates: () => Promise<UpdateInfo>
   openUpdateUrl: (url: string) => Promise<void>
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void
+  onDataLoadFailed: (callback: (payload: DataLoadFailedPayload) => void) => () => void
   onQuickAdd: (callback: () => void) => () => void
   onOpenTask: (callback: (taskId: string) => void) => () => void
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void
@@ -76,7 +87,8 @@ export interface ToDoDeskApi {
 
 const api: ToDoDeskApi = {
   loadData: () => ipcRenderer.invoke('data:load'),
-  saveData: (data) => ipcRenderer.invoke('data:save', data),
+  reloadData: () => ipcRenderer.invoke('data:reload'),
+  saveData: (data, options) => ipcRenderer.invoke('data:save', { data, ...options }),
   pickAttachmentFile: () => ipcRenderer.invoke('attachments:pick'),
   copyAttachmentFile: (sourcePath, fileName) =>
     ipcRenderer.invoke('attachments:copy', sourcePath, fileName),
@@ -96,6 +108,12 @@ const api: ToDoDeskApi = {
     const listener = (_: Electron.IpcRendererEvent, data: DataPayload): void => callback(data)
     ipcRenderer.on('data:updated', listener)
     return () => ipcRenderer.removeListener('data:updated', listener)
+  },
+  onDataLoadFailed: (callback) => {
+    const listener = (_: Electron.IpcRendererEvent, payload: DataLoadFailedPayload): void =>
+      callback(payload)
+    ipcRenderer.on('data:load-failed', listener)
+    return () => ipcRenderer.removeListener('data:load-failed', listener)
   },
   onQuickAdd: (callback) => {
     const listener = (): void => callback()

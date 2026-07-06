@@ -790,9 +790,10 @@ export default function BoardView(): JSX.Element {
 
   const setBoardBackground = async (color: string): Promise<void> => {
     const nextColor = normalizeBoardBackground(color)
+    const current = useAppStore.getState().data
     await persist({
-      ...data,
-      settings: { ...data.settings, boardBackgroundColor: nextColor }
+      ...current,
+      settings: { ...current.settings, boardBackgroundColor: nextColor }
     })
   }
 

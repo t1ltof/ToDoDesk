@@ -112,7 +112,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   if (!task) return null
 
   const save = async (next: typeof data): Promise<void> => {
-    await persist(next)
+    await persist(next, { clearUnsaved: true })
   }
 
   const handleField = async (

@@ -22,10 +22,22 @@ import {
 import { getBackupFilePath, getBackupsDirectory, getDataDirectory, getDataFilePath } from './paths'
 import { validateImportFile } from './importValidator'
 import type { ImportPreview } from '../shared/import'
-import { decrypt, encrypt, getDataPassword, isEncrypted } from './encryption'
+import { encrypt, getDataPassword } from './encryption'
+import { readDataFileContent } from './dataFileIO'
 import { markSyncWrite } from './syncWatcher'
+import type { BoardLink, BoardNode } from '../shared/schema'
 
 const APP_VERSION = '0.8.0'
+
+export class DataLoadError extends Error {
+  readonly needsPassword: boolean
+
+  constructor(message: string, needsPassword = false) {
+    super(message)
+    this.name = 'DataLoadError'
+    this.needsPassword = needsPassword
+  }
+}
 
 function escapeCsvField(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
@@ -107,15 +119,6 @@ function pruneBackups(maxVersions: number): void {
   }
 }
 
-function readRawFile(path: string): string {
-  const raw = readFileSync(path, 'utf-8')
-  if (!isEncrypted(raw)) return raw
-
-  const password = getDataPassword()
-  if (!password) throw new Error('Файл зашифрован — введите пароль в настройках')
-  return decrypt(raw, password)
-}
-
 function writeAtomic(file: DataFile, data: DataPayload): void {
   ensureDataDirectory()
   const dataPath = getDataFilePath()
@@ -127,6 +130,10 @@ function writeAtomic(file: DataFile, data: DataPayload): void {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     copyFileSync(dataPath, join(getBackupsDirectory(), `${stamp}.tododesk`))
     pruneBackups(data.settings.autoBackupEnabled ? data.settings.autoBackupMaxVersions : 10)
+  }
+
+  if (data.settings.dataPasswordEnabled && !getDataPassword()) {
+    throw new Error('Пароль не задан — невозможно сохранить зашифрованные данные')
   }
 
   const toWrite =
@@ -149,7 +156,18 @@ function parseDataFile(rawText: string): DataPayload {
 }
 
 export function loadFromExternalPath(sourcePath: string): DataPayload {
-  return parseDataFile(readRawFile(sourcePath))
+  return parseDataFile(readDataFileContent(sourcePath))
+}
+
+function loadDataFromPath(dataPath: string): DataPayload {
+  return parseDataFile(readDataFileContent(dataPath))
+}
+
+function isPasswordError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes('парол') || error.message.includes('зашифрован'))
+  )
 }
 
 export function loadData(): DataPayload {
@@ -163,20 +181,20 @@ export function loadData(): DataPayload {
   }
 
   try {
-    return parseDataFile(readRawFile(dataPath))
-  } catch {
+    return loadDataFromPath(dataPath)
+  } catch (primaryError) {
     const backupPath = getBackupFilePath()
     if (existsSync(backupPath)) {
       try {
-        return parseDataFile(readRawFile(backupPath))
+        return loadDataFromPath(backupPath)
       } catch {
         // fall through
       }
     }
 
-    const empty = buildDataFile(createEmptyData())
-    writeAtomic(empty, empty.data)
-    return empty.data
+    const message =
+      primaryError instanceof Error ? primaryError.message : 'Не удалось загрузить данные'
+    throw new DataLoadError(message, isPasswordError(primaryError))
   }
 }
 
@@ -209,10 +227,10 @@ export function exportToFile(targetPath: string, mergeWithCurrent = false): { da
     try {
       const validation = validateImportFile(targetPath)
       if (validation.valid) {
-        const raw = JSON.parse(readFileSync(targetPath, 'utf-8'))
+        const raw = JSON.parse(readDataFileContent(targetPath)) as DataFile
         const parsed = dataFileSchema.parse({
           ...raw,
-          data: migratePayload((raw as DataFile).data)
+          data: migratePayload(raw.data)
         })
         exportData = mergePayloads(data, parsed.data)
       }
@@ -240,12 +258,16 @@ export function importFromPath(sourcePath: string, mode: ImportMode): DataPayloa
   return importAsNewProject(sourcePath)
 }
 
-export function importReplace(sourcePath: string): DataPayload {
-  const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
-  const parsed = dataFileSchema.parse({
+function parseImportFile(sourcePath: string): DataFile {
+  const raw = JSON.parse(readDataFileContent(sourcePath)) as DataFile
+  return dataFileSchema.parse({
     ...raw,
-    data: migratePayload((raw as DataFile).data)
+    data: migratePayload(raw.data)
   })
+}
+
+export function importReplace(sourcePath: string): DataPayload {
+  const parsed = parseImportFile(sourcePath)
   writeAtomic(parsed, parsed.data)
   return parsed.data
 }
@@ -265,7 +287,36 @@ function collectExistingIds(data: DataPayload): Set<string> {
   for (const n of data.boardNodes) ids.add(n.id)
   for (const l of data.boardLinks) ids.add(l.id)
   for (const g of data.boardGroups) ids.add(g.id)
+  for (const a of data.taskAttachments) ids.add(a.id)
+  for (const s of data.sprints) ids.add(s.id)
+  for (const s of data.boardSnapshots) ids.add(s.id)
+  for (const r of data.smartRules) ids.add(r.id)
+  for (const h of data.boardHistory) ids.add(h.id)
   return ids
+}
+
+function remapBoardNodes(
+  nodes: BoardNode[],
+  mapId: (id: string | null) => string | null
+): BoardNode[] {
+  return nodes.map((node) => ({
+    ...node,
+    id: mapId(node.id)!,
+    taskId: mapId(node.taskId),
+    groupId: mapId(node.groupId)
+  }))
+}
+
+function remapBoardLinks(
+  links: BoardLink[],
+  mapId: (id: string | null) => string | null
+): BoardLink[] {
+  return links.map((link) => ({
+    ...link,
+    id: mapId(link.id)!,
+    fromNodeId: mapId(link.fromNodeId)!,
+    toNodeId: mapId(link.toNodeId)!
+  }))
 }
 
 function ensureId(id: string, idMap: Map<string, string>, existing: Set<string>): string {
@@ -295,6 +346,11 @@ function remapImportedPayload(
   for (const item of imported.boardNodes) ensureId(item.id, idMap, existing)
   for (const item of imported.boardLinks) ensureId(item.id, idMap, existing)
   for (const item of imported.boardGroups) ensureId(item.id, idMap, existing)
+  for (const item of imported.taskAttachments) ensureId(item.id, idMap, existing)
+  for (const item of imported.sprints) ensureId(item.id, idMap, existing)
+  for (const item of imported.boardSnapshots) ensureId(item.id, idMap, existing)
+  for (const item of imported.smartRules) ensureId(item.id, idMap, existing)
+  for (const item of imported.boardHistory) ensureId(item.id, idMap, existing)
 
   const mapId = (id: string | null): string | null => {
     if (!id) return null
@@ -367,6 +423,37 @@ function remapImportedPayload(
     boardGroups: imported.boardGroups.map((g) => ({
       ...g,
       id: mapId(g.id)!
+    })),
+    taskAttachments: imported.taskAttachments.map((attachment) => ({
+      ...attachment,
+      id: mapId(attachment.id)!,
+      taskId: mapId(attachment.taskId)!
+    })),
+    sprints: imported.sprints.map((sprint) => ({
+      ...sprint,
+      id: mapId(sprint.id)!,
+      taskIds: sprint.taskIds.map((id) => mapId(id) ?? id)
+    })),
+    boardSnapshots: imported.boardSnapshots.map((snapshot) => ({
+      ...snapshot,
+      id: mapId(snapshot.id)!,
+      nodes: remapBoardNodes(snapshot.nodes, mapId),
+      links: remapBoardLinks(snapshot.links, mapId)
+    })),
+    smartRules: imported.smartRules.map((rule) => ({
+      ...rule,
+      id: mapId(rule.id)!,
+      tagId: rule.tagId ? (mapId(rule.tagId) ?? undefined) : undefined
+    })),
+    drafts: imported.drafts.map((draft) => ({
+      ...draft,
+      entityId: mapId(draft.entityId)!
+    })),
+    boardHistory: imported.boardHistory.map((entry) => ({
+      ...entry,
+      id: mapId(entry.id)!,
+      nodes: remapBoardNodes(entry.nodes, mapId),
+      links: remapBoardLinks(entry.links, mapId)
     })),
     settings: imported.settings
   }
@@ -465,18 +552,45 @@ export function mergePayloads(current: DataPayload, imported: DataPayload): Data
     ],
     boardLinks: [...current.boardLinks, ...remapped.boardLinks],
     boardGroups: [...current.boardGroups, ...remapped.boardGroups],
+    taskAttachments: [
+      ...current.taskAttachments,
+      ...remapped.taskAttachments.filter(
+        (attachment) =>
+          !current.taskAttachments.some((existing) => existing.id === attachment.id)
+      )
+    ],
+    sprints: [
+      ...current.sprints,
+      ...remapped.sprints.filter(
+        (sprint) => !current.sprints.some((existing) => existing.id === sprint.id)
+      )
+    ],
+    boardSnapshots: [
+      ...current.boardSnapshots,
+      ...remapped.boardSnapshots.filter(
+        (snapshot) => !current.boardSnapshots.some((existing) => existing.id === snapshot.id)
+      )
+    ],
+    smartRules: [
+      ...current.smartRules,
+      ...remapped.smartRules.filter(
+        (rule) => !current.smartRules.some((existing) => existing.id === rule.id)
+      )
+    ],
+    drafts: [
+      ...current.drafts.filter(
+        (draft) => !remapped.drafts.some((imported) => imported.entityId === draft.entityId)
+      ),
+      ...remapped.drafts
+    ],
+    boardHistory: [...current.boardHistory, ...remapped.boardHistory].slice(-20),
     settings: current.settings
   }
 }
 
 export function importMerge(sourcePath: string): DataPayload {
   const current = loadData()
-  const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
-  const parsed = dataFileSchema.parse({
-    ...raw,
-    data: migratePayload((raw as DataFile).data)
-  })
-
+  const parsed = parseImportFile(sourcePath)
   const merged = mergePayloads(current, parsed.data)
   saveData(merged)
   return merged
@@ -484,11 +598,7 @@ export function importMerge(sourcePath: string): DataPayload {
 
 export function importAsNewProject(sourcePath: string): DataPayload {
   const current = loadData()
-  const raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
-  const parsed = dataFileSchema.parse({
-    ...raw,
-    data: migratePayload((raw as DataFile).data)
-  })
+  const parsed = parseImportFile(sourcePath)
 
   const projectId = randomUUID()
   const now = new Date().toISOString()
@@ -504,6 +614,11 @@ export function importAsNewProject(sourcePath: string): DataPayload {
   for (const node of parsed.data.boardNodes) ensureId(node.id, idMap, existing)
   for (const link of parsed.data.boardLinks) ensureId(link.id, idMap, existing)
   for (const group of parsed.data.boardGroups) ensureId(group.id, idMap, existing)
+  for (const attachment of parsed.data.taskAttachments) ensureId(attachment.id, idMap, existing)
+  for (const sprint of parsed.data.sprints) ensureId(sprint.id, idMap, existing)
+  for (const snapshot of parsed.data.boardSnapshots) ensureId(snapshot.id, idMap, existing)
+  for (const rule of parsed.data.smartRules) ensureId(rule.id, idMap, existing)
+  for (const entry of parsed.data.boardHistory) ensureId(entry.id, idMap, existing)
 
   const remapped = remapImportedPayload(parsed.data, idMap, existing, projectId)
 
@@ -537,6 +652,12 @@ export function importAsNewProject(sourcePath: string): DataPayload {
     boardNodes: [...current.boardNodes, ...remapped.boardNodes],
     boardLinks: [...current.boardLinks, ...remapped.boardLinks],
     boardGroups: [...current.boardGroups, ...remapped.boardGroups],
+    taskAttachments: [...current.taskAttachments, ...remapped.taskAttachments],
+    sprints: [...current.sprints, ...remapped.sprints],
+    boardSnapshots: [...current.boardSnapshots, ...remapped.boardSnapshots],
+    smartRules: [...current.smartRules, ...remapped.smartRules],
+    drafts: [...current.drafts, ...remapped.drafts],
+    boardHistory: [...current.boardHistory, ...remapped.boardHistory].slice(-20),
     settings: current.settings
   }
 

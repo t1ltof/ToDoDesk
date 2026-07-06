@@ -49,8 +49,6 @@ export default function App(): JSX.Element {
   const theme = data.settings.theme
   const fontSize = data.settings.fontSize
   const accentColor = data.settings.accentColor
-  const notificationSound = data.settings.notificationSound
-
   useKeyboardShortcuts(
     () => setQuickAddOpen(true),
     () => setGlobalSearchOpen(true),
@@ -75,9 +73,9 @@ export default function App(): JSX.Element {
       const withRules = ensureOverdueSmartRule(currentData)
       const applied = applySmartRules(withRules)
       if (JSON.stringify(applied) !== JSON.stringify(currentData)) {
-        void useAppStore.getState().persist(applied)
+        useAppStore.getState().setData(applied)
       } else if (withRules.smartRules.length !== currentData.smartRules.length) {
-        void useAppStore.getState().persist(withRules)
+        useAppStore.getState().setData(withRules)
       }
     }, 1500)
 
@@ -86,7 +84,7 @@ export default function App(): JSX.Element {
       const current = useAppStore.getState().data
       const next = applySmartRules(current)
       if (JSON.stringify(next) !== JSON.stringify(current)) {
-        void useAppStore.getState().persist(next)
+        useAppStore.getState().setData(next)
       }
     }, 60_000)
 
@@ -114,7 +112,16 @@ export default function App(): JSX.Element {
   }, [selectedTaskId, data.tasks, setSelectedTaskId])
 
   useEffect(() => {
-    const unsubData = window.tododesk.onDataUpdated((updated) => setData(updated))
+    const unsubData = window.tododesk.onDataUpdated((updated) => {
+      useAppStore.setState({ data: updated, undoSnapshot: null })
+      void window.tododesk.setUnsavedChanges(false)
+    })
+    const unsubLoadFailed = window.tododesk.onDataLoadFailed((payload) => {
+      if (payload.needsPassword) {
+        setSettingsOpen(true)
+      }
+      console.error(payload.message)
+    })
     const unsubQuickAdd = window.tododesk.onQuickAdd(() => setQuickAddOpen(true))
     const unsubOpenTask = window.tododesk.onOpenTask((taskId) => setSelectedTaskId(taskId))
     const unsubUpdate = window.tododesk.onUpdateAvailable((info) => setUpdateInfo(info))
@@ -127,6 +134,7 @@ export default function App(): JSX.Element {
 
     return () => {
       unsubData()
+      unsubLoadFailed()
       unsubQuickAdd()
       unsubOpenTask()
       unsubUpdate()
@@ -143,15 +151,6 @@ export default function App(): JSX.Element {
     root.classList.add(`font-size-${fontSize}`)
     applyAccentColor(accentColor)
   }, [theme, fontSize, accentColor])
-
-  useEffect(() => {
-    if (!notificationSound) return
-    const onFocus = (): void => {
-      void window.tododesk.setUnsavedChanges(false)
-    }
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [notificationSound])
 
   if (loading) {
     return (

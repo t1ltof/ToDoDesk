@@ -15,9 +15,17 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
   const projectListView = `project:${projectId}` as ViewId
   const project = data.projects.find((p) => p.id === projectId)
 
+  const query = searchQuery.trim().toLowerCase()
+  const matchesSearch = (title: string, description: string): boolean =>
+    !query || title.toLowerCase().includes(query) || description.toLowerCase().includes(query)
+
   const todoTasks = filterTasksForView(data, view, searchQuery).filter((t) => t.status === 'todo')
   const doneTasks = data.tasks.filter(
-    (t) => t.projectId === projectId && t.parentId === null && t.status === 'done'
+    (t) =>
+      t.projectId === projectId &&
+      t.parentId === null &&
+      t.status === 'done' &&
+      matchesSearch(t.title, t.description)
   )
 
   const toggle = async (taskId: string, done: boolean): Promise<void> => {

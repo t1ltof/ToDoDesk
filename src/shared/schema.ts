@@ -67,10 +67,13 @@ export const taskTagSchema = z.object({
   tagId: z.string().uuid()
 })
 
+export const reminderKindSchema = z.enum(['dueDate', 'custom'])
+
 export const reminderSchema = z.object({
   id: z.string().uuid(),
   taskId: z.string().uuid(),
-  remindAt: z.string()
+  remindAt: z.string(),
+  kind: reminderKindSchema.default('custom')
 })
 
 export const templateSchema = z.object({
@@ -417,9 +420,7 @@ export function migratePayload(raw: unknown): DataPayload {
     boardSnapshots: data.boardSnapshots ?? [],
     smartRules: data.smartRules ?? [],
     drafts: data.drafts ?? [],
-    boardHistory: Array.isArray(data.boardHistory)
-      ? (data.boardHistory as unknown[]).slice(0, 20)
-      : [],
+    boardHistory: data.boardHistory ?? [],
     settings: { ...defaultSettings, ...(data.settings as object) }
   })
 }

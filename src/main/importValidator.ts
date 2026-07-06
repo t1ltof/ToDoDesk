@@ -1,6 +1,6 @@
-import { readFileSync } from 'fs'
 import { dataFileSchema, migratePayload } from '../shared/schema'
 import type { ImportPreview } from '../shared/import'
+import { readDataFileContent } from './dataFileIO'
 
 export function validateImportFile(sourcePath: string): ImportPreview {
   const base: ImportPreview = {
@@ -18,7 +18,7 @@ export function validateImportFile(sourcePath: string): ImportPreview {
 
   let raw: unknown
   try {
-    raw = JSON.parse(readFileSync(sourcePath, 'utf-8'))
+    raw = JSON.parse(readDataFileContent(sourcePath))
   } catch {
     return { ...base, errors: ['Файл не является корректным JSON'] }
   }
@@ -53,7 +53,13 @@ export function validateImportFile(sourcePath: string): ImportPreview {
     'notes',
     'projectTemplates',
     'activityLogs',
-    'weeklyGoals'
+    'weeklyGoals',
+    'taskAttachments',
+    'sprints',
+    'boardSnapshots',
+    'smartRules',
+    'drafts',
+    'boardHistory'
   ]) {
     if (!(key in data)) base.warnings.push(`Отсутствует поле "${key}" — будет создано пустым`)
     else if (!Array.isArray(data[key])) base.errors.push(`Поле "${key}" должно быть массивом`)
@@ -91,7 +97,7 @@ export function validateImportFile(sourcePath: string): ImportPreview {
     base.templateCount = parsed.data.templates.length
     base.valid = base.errors.length === 0
 
-    if (file.version && !['1.0', '1.1', '1.2', '1.3'].includes(String(file.version))) {
+    if (file.version && !['1.0', '1.1', '1.2', '1.3', '1.4'].includes(String(file.version))) {
       base.warnings.push(`Версия формата ${file.version} — данные будут мигрированы`)
     }
   } catch (error) {

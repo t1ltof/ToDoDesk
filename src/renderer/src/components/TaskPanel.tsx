@@ -12,7 +12,7 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { QuickFilter, ViewId } from '../../../shared/schema'
 import {
   bulkAddTag,
@@ -22,7 +22,7 @@ import {
   bulkPin,
   bulkSetDueDate
 } from '../utils/bulkActions'
-import { clearCompletedTasks, createRootTask, reorderTasks } from '../utils/taskHelpers'
+import { clearCompletedTasks, createRootTask, reorderTasks, toggleTaskTag } from '../utils/taskHelpers'
 import { filterTasksForView, sortProjects, useAppStore } from '../store/useAppStore'
 import { todayKey } from '../utils/calendarUtils'
 import ProjectDialog from './ProjectDialog'
@@ -81,6 +81,10 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
   const [dragOverEnd, setDragOverEnd] = useState(false)
   const newTaskInputRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    setBulkMode(false)
+  }, [activeView])
+
   const tasks = useMemo(
     () => filterTasksForView(data, activeView, searchQuery, quickFilter),
     [data, activeView, searchQuery, quickFilter]
@@ -110,7 +114,13 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
         : null
 
     const dueDate = activeView === 'today' ? todayKey() : null
-    await persist(createRootTask(data, { title, projectId, dueDate }))
+    let next = createRootTask(data, { title, projectId, dueDate })
+    if (activeView.startsWith('tag:')) {
+      const tagId = activeView.replace('tag:', '')
+      const createdTask = next.tasks[next.tasks.length - 1]
+      next = toggleTaskTag(next, createdTask.id, tagId)
+    }
+    await persist(next)
     setNewTaskTitle('')
   }
 

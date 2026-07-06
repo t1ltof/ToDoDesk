@@ -9,6 +9,7 @@ import { join } from 'path'
 import { applyAutostart } from './autostart'
 import {
   buildExportReport,
+  DataLoadError,
   exportCsvToFile,
   exportToFile,
   importFromPath,
@@ -17,6 +18,7 @@ import {
   saveData,
   type ImportMode
 } from './dataStore'
+import { createEmptyData } from '../shared/schema'
 import { setDataPassword } from './encryption'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { checkDueTasks, scheduleReminders } from './notifications'
@@ -38,6 +40,7 @@ let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let reminderTimer: NodeJS.Timeout | null = null
 let hasUnsavedChanges = false
+let lastSyncFolderPath: string | null | undefined
 
 function getWindow(): BrowserWindow | null {
   return mainWindow
@@ -99,10 +102,14 @@ function broadcastData(data: DataPayload): void {
 
 function applySettings(data: DataPayload): void {
   applyAutostart(data.settings)
-  startSyncWatcher(data.settings.syncFolderPath, (synced) => {
-    applySettings(synced)
-    broadcastData(synced)
-  })
+  const syncPath = data.settings.syncFolderPath
+  if (syncPath !== lastSyncFolderPath) {
+    lastSyncFolderPath = syncPath
+    startSyncWatcher(syncPath, (synced) => {
+      applySettings(synced)
+      broadcastData(synced)
+    })
+  }
 }
 
 function quitApp(): void {
@@ -148,20 +155,30 @@ if (!gotLock) {
     app.setAppUserModelId('com.t1ltof.tododesk')
 
     protocol.handle('tododesk-attachment', (request) => {
-      const relativePath = decodeURIComponent(
-        request.url.replace(/^tododesk-attachment:\/\//, '')
-      )
-      return net.fetch(pathToFileURL(getFullAttachmentPath(relativePath)).toString())
+      try {
+        const relativePath = decodeURIComponent(
+          request.url.replace(/^tododesk-attachment:\/\//, '')
+        )
+        return net.fetch(pathToFileURL(getFullAttachmentPath(relativePath)).toString())
+      } catch {
+        return new Response('Not Found', { status: 404 })
+      }
     })
 
     ipcMain.handle('data:load', () => loadData())
-    ipcMain.handle('data:save', (_, data: DataPayload) => {
-      saveData(data)
-      hasUnsavedChanges = false
-      applySettings(data)
-      updateTrayTooltip(data)
-      return data
-    })
+    ipcMain.handle('data:reload', () => loadData())
+    ipcMain.handle(
+      'data:save',
+      (_, payload: DataPayload | { data: DataPayload; clearUnsaved?: boolean }) => {
+        const data = 'data' in payload ? payload.data : payload
+        const clearUnsaved = 'data' in payload ? payload.clearUnsaved !== false : false
+        saveData(data)
+        if (clearUnsaved) hasUnsavedChanges = false
+        applySettings(data)
+        updateTrayTooltip(data)
+        return data
+      }
+    )
 
     ipcMain.handle('data:export', async (_, mergeWithCurrent?: boolean) => {
       const result = await dialog.showSaveDialog(mainWindow!, {
@@ -257,7 +274,20 @@ if (!gotLock) {
     createTray(getWindow, loadData, quitApp)
     registerHotkeys(getWindow)
 
-    const data = loadData()
+    let data: DataPayload
+    try {
+      data = loadData()
+    } catch (error) {
+      data = createEmptyData()
+      const needsPassword = error instanceof DataLoadError && error.needsPassword
+      mainWindow?.webContents.once('did-finish-load', () => {
+        mainWindow?.webContents.send('data:load-failed', {
+          message: error instanceof Error ? error.message : 'Не удалось загрузить данные',
+          needsPassword
+        })
+      })
+    }
+
     applySettings(data)
     updateTrayTooltip(data)
     checkDueTasks(data, getWindow)

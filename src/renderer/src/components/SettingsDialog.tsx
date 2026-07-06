@@ -27,7 +27,7 @@ export default function SettingsDialog({
   onOpenTemplates,
   onOpenProjectTemplates
 }: SettingsDialogProps): JSX.Element {
-  const { data, persist } = useAppStore()
+  const { data, persist, setData } = useAppStore()
   const settings = data.settings
   const [activityLogOpen, setActivityLogOpen] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
@@ -48,6 +48,12 @@ export default function SettingsDialog({
       }
       await window.tododesk.setDataPassword(pwd)
       await update({ dataPasswordEnabled: true })
+      try {
+        const reloaded = await window.tododesk.reloadData()
+        setData(reloaded)
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Не удалось перезагрузить данные')
+      }
     } else {
       await window.tododesk.setDataPassword(null)
       await update({ dataPasswordEnabled: false })

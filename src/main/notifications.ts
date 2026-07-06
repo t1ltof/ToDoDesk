@@ -3,6 +3,17 @@ import type { DataPayload, Reminder, Settings, Task } from '../shared/schema'
 
 const firedReminders = new Set<string>()
 
+function pruneFiredReminders(now: Date): void {
+  if (firedReminders.size < 500) return
+  const today = todayKey()
+  const datePrefix = now.toISOString().slice(0, 10)
+  for (const key of firedReminders) {
+    if (!key.includes(today) && !key.includes(datePrefix)) {
+      firedReminders.delete(key)
+    }
+  }
+}
+
 function todayKey(): string {
   const now = new Date()
   const y = now.getFullYear()
@@ -61,13 +72,21 @@ function showNotification(
   }
 }
 
+function getTaskDueDateTime(task: Task, settings: Settings): Date {
+  if (task.dueTime) {
+    const [hour, minute] = task.dueTime.split(':').map(Number)
+    return parseDueDateTime(task.dueDate!, hour, minute)
+  }
+  return parseDueDateTime(task.dueDate!, settings.notificationHour, settings.notificationMinute)
+}
+
 function collectDueDateReminders(data: DataPayload, settings: Settings, now: Date): Task[] {
   const due: Task[] = []
   const todoTasks = data.tasks.filter((task) => task.status === 'todo' && task.dueDate)
 
   for (const task of todoTasks) {
     if (!task.dueDate) continue
-    const dueAt = parseDueDateTime(task.dueDate, settings.notificationHour, settings.notificationMinute)
+    const dueAt = getTaskDueDateTime(task, settings)
 
     if (settings.remindDayBefore) {
       const dayBefore = new Date(dueAt)
@@ -142,6 +161,7 @@ export function checkDueTasks(
 ): void {
   const settings = data.settings
   const now = new Date()
+  pruneFiredReminders(now)
 
   if (!isQuietHours(settings, now)) {
     const dueDateReminders = collectDueDateReminders(data, settings, now)
