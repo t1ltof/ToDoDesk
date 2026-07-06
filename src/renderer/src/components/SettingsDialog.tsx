@@ -153,22 +153,32 @@ export default function SettingsDialog({
             </div>
 
             <div>
-              <p className="mb-2 text-sm text-gray-400">Тихие часы (без уведомлений)</p>
+              <label className="mb-2 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.quietHoursEnabled ?? true}
+                  onChange={(e) => void update({ quietHoursEnabled: e.target.checked })}
+                />
+                Тихие часы
+              </label>
               <div className="flex items-center gap-2">
                 <input
                   type="time"
                   value={settings.quietHoursStart ?? '23:00'}
                   onChange={(e) => void update({ quietHoursStart: e.target.value })}
-                  className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                  disabled={!(settings.quietHoursEnabled ?? true)}
+                  className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <span className="text-gray-500">—</span>
                 <input
                   type="time"
                   value={settings.quietHoursEnd ?? '08:00'}
                   onChange={(e) => void update({ quietHoursEnd: e.target.value })}
-                  className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                  disabled={!(settings.quietHoursEnabled ?? true)}
+                  className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
+              <p className="mt-1 text-xs text-gray-500">Без уведомлений в указанный интервал</p>
             </div>
 
             <label className="flex items-center gap-2 text-sm">

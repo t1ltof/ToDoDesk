@@ -9,7 +9,7 @@ import type {
   DataPayload,
   Task
 } from '../../../shared/schema'
-import { todayKey } from '../store/useAppStore'
+import { addDaysToDateKey, todayKey } from './calendarUtils'
 import { isTaskBlocked } from './taskFilters'
 
 export type BoardSnapshot = {
@@ -456,9 +456,7 @@ export function nodesIntersectingRect(nodes: BoardNode[], rect: { x: number; y: 
 export function formatBoardDueDate(dueDate: string | null): string | null {
   if (!dueDate) return null
   const today = todayKey()
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowKey = tomorrow.toISOString().slice(0, 10)
+  const tomorrowKey = addDaysToDateKey(today, 1)
 
   if (dueDate === today) return 'Сегодня'
   if (dueDate === tomorrowKey) return 'Завтра'

@@ -4,7 +4,11 @@ import type { DataPayload, Reminder, Settings, Task } from '../shared/schema'
 const firedReminders = new Set<string>()
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function parseDueDateTime(dueDate: string, hour: number, minute: number): Date {
@@ -17,6 +21,7 @@ function parseTimeToMinutes(time: string): number {
 }
 
 function isQuietHours(settings: Settings, now: Date): boolean {
+  if (settings.quietHoursEnabled === false) return false
   const start = settings.quietHoursStart
   const end = settings.quietHoursEnd
   if (!start || !end) return false
@@ -92,7 +97,7 @@ function collectCustomReminders(data: DataPayload, now: Date): Array<{ task: Tas
   for (const reminder of data.reminders) {
     const remindAt = new Date(reminder.remindAt).getTime()
     if (remindAt > nowMs) continue
-    if (nowMs - remindAt >= 60_000) continue
+    if (nowMs - remindAt >= 300_000) continue
 
     const task = data.tasks.find((t) => t.id === reminder.taskId && t.status === 'todo')
     if (task) result.push({ task, reminder })

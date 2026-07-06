@@ -1,7 +1,7 @@
 import { Download } from 'lucide-react'
 import { useMemo } from 'react'
 import { getStats, useAppStore } from '../store/useAppStore'
-import { getHeatmapDays, getWeekDays, getWeekKey } from '../utils/calendarUtils'
+import { getHeatmapDays, getWeekDays, getWeekKey, localDateKey } from '../utils/calendarUtils'
 import { buildWeeklyReport, downloadTextReport } from '../utils/reportExport'
 import { getWeeklyGoalsProgress } from '../utils/weeklyGoalsHelpers'
 import clsx from 'clsx'
@@ -56,7 +56,7 @@ export default function StatsView(): JSX.Element {
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date()
       d.setDate(d.getDate() - (6 - i))
-      const key = d.toISOString().slice(0, 10)
+      const key = localDateKey(d)
       const count = data.tasks.filter(
         (t) => t.completedAt && t.completedAt.slice(0, 10) === key
       ).length
@@ -95,7 +95,7 @@ export default function StatsView(): JSX.Element {
     return Array.from({ length: 7 }, (_, index) => {
       const date = new Date()
       date.setDate(date.getDate() + index)
-      const key = date.toISOString().slice(0, 10)
+      const key = localDateKey(date)
       const count = data.tasks.filter(
         (task) =>
           task.status === 'todo' &&
@@ -114,7 +114,7 @@ export default function StatsView(): JSX.Element {
 
   const handleExport = (): void => {
     const report = buildWeeklyReport(data)
-    const filename = `tododesk-otchet-${new Date().toISOString().slice(0, 10)}.txt`
+    const filename = `tododesk-otchet-${localDateKey()}.txt`
     downloadTextReport(report, filename)
   }
 

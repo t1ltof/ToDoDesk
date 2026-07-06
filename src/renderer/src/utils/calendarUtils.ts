@@ -13,8 +13,36 @@ export interface CalendarCell {
   isWeekend: boolean
 }
 
+/** YYYY-MM-DD in local timezone (never use toISOString for calendar dates). */
+export function localDateKey(date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function todayKey(): string {
-  return new Date().toISOString().slice(0, 10)
+  return localDateKey()
+}
+
+export function parseLocalDate(dateKey: string): Date {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const date = parseLocalDate(dateKey)
+  date.setDate(date.getDate() + days)
+  return localDateKey(date)
+}
+
+export function formatWeekRange(weekKey: string): string {
+  const monday = parseLocalDate(weekKey)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const fmt = (d: Date): string =>
+    d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+  return `${fmt(monday)} — ${fmt(sunday)}`
 }
 
 export function getWeekDays(baseDate = new Date()): string[] {
@@ -26,7 +54,7 @@ export function getWeekDays(baseDate = new Date()): string[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
-    return d.toISOString().slice(0, 10)
+    return localDateKey(d)
   })
 }
 
@@ -41,7 +69,7 @@ export function getMonthGrid(year: number, month: number): CalendarCell[] {
   return Array.from({ length: 42 }, (_, i) => {
     const d = new Date(start)
     d.setDate(start.getDate() + i)
-    const date = d.toISOString().slice(0, 10)
+    const date = localDateKey(d)
     const dow = d.getDay()
     return {
       date,
@@ -58,7 +86,7 @@ export function formatMonthYear(year: number, month: number): string {
 }
 
 export function formatDayLabel(date: string): string {
-  return new Date(`${date}T12:00:00`).toLocaleDateString('ru-RU', {
+  return parseLocalDate(date).toLocaleDateString('ru-RU', {
     weekday: 'long',
     day: 'numeric',
     month: 'long'
@@ -71,7 +99,7 @@ export function getWeekKey(date = new Date()): string {
   const mondayOffset = day === 0 ? -6 : 1 - day
   const monday = new Date(date)
   monday.setDate(date.getDate() + mondayOffset)
-  return monday.toISOString().slice(0, 10)
+  return localDateKey(monday)
 }
 
 export function getHeatmapDays(weeks = 12): string[] {
@@ -90,7 +118,7 @@ export function getHeatmapDays(weeks = 12): string[] {
   end.setDate(end.getDate() + 6)
 
   while (cursor <= end) {
-    days.push(cursor.toISOString().slice(0, 10))
+    days.push(localDateKey(cursor))
     cursor.setDate(cursor.getDate() + 1)
   }
   return days

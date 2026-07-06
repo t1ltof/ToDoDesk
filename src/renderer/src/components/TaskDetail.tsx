@@ -38,6 +38,11 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   const [descriptionMode, setDescriptionMode] = useState<'edit' | 'preview'>('edit')
   const [dragOver, setDragOver] = useState(false)
   const [showDraftBanner, setShowDraftBanner] = useState(false)
+  const [dueTimeDraft, setDueTimeDraft] = useState('')
+  const [showReminderForm, setShowReminderForm] = useState(false)
+  const [reminderHours, setReminderHours] = useState('2')
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false)
+  const [templateName, setTemplateName] = useState('')
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const task = data.tasks.find((item) => item.id === selectedTaskId)
@@ -47,6 +52,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
     if (task) {
       setTitle(task.title)
       setDescription(task.description)
+      setDueTimeDraft(task.dueTime ?? '')
       const existingDraft = getTaskDraft(data, task.id)
       setShowDraftBanner(
         Boolean(
@@ -56,7 +62,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
         )
       )
     }
-  }, [task?.id, task?.title, task?.description, task?.updatedAt, data.drafts])
+  }, [task?.id, task?.title, task?.description, task?.dueTime, task?.updatedAt, data.drafts])
   const projects = sortProjects(data.projects)
 
   const checklist = useMemo(
@@ -114,6 +120,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       title: string
       description: string
       dueDate: string | null
+      dueDateEnd: string | null
       dueTime: string | null
       dependsOnTaskId: string | null
       pinned: boolean
@@ -357,16 +364,30 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-500">Время</label>
+            <label className="mb-1 block text-xs text-gray-500">Конец срока (необязательно)</label>
             <input
-              type="time"
-              value={task.dueTime ?? ''}
+              type="date"
+              value={task.dueDateEnd ?? ''}
               onChange={(event) =>
-                void handleField({ dueTime: event.target.value || null })
+                void handleField({ dueDateEnd: event.target.value || null })
               }
               className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">Время</label>
+          <input
+            type="time"
+            value={dueTimeDraft}
+            onChange={(event) => setDueTimeDraft(event.target.value)}
+            onBlur={() => {
+              const value = dueTimeDraft || null
+              if (value !== task.dueTime) void handleField({ dueTime: value })
+            }}
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -429,21 +450,63 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
           </button>
           <button
             type="button"
-            onClick={async () => {
-              const raw = prompt('Напомнить через сколько часов?', '2')
-              if (!raw?.trim()) return
-              const hours = Number(raw)
-              if (!Number.isFinite(hours) || hours <= 0) {
-                alert('Введите положительное число часов')
-                return
-              }
-              await save(addReminderInHours(data, task.id, hours))
-            }}
-            className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
+            onClick={() => setShowReminderForm((value) => !value)}
+            className={clsx(
+              'inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm transition',
+              showReminderForm
+                ? 'border-accent bg-accent-muted/30 text-blue-300'
+                : 'border-surface-border text-gray-300 hover:bg-surface'
+            )}
           >
             <Bell size={14} /> Напомнить через N часов
           </button>
         </div>
+
+        {showReminderForm && (
+          <div className="flex items-center gap-2 rounded-lg border border-surface-border bg-surface/40 px-3 py-2">
+            <label className="shrink-0 text-xs text-gray-500">Через</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={reminderHours}
+              onChange={(event) => setReminderHours(event.target.value)}
+              className="w-20 rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
+            />
+            <span className="text-xs text-gray-500">ч.</span>
+            <button
+              type="button"
+              onClick={async () => {
+                const hours = Number(reminderHours)
+                if (!Number.isFinite(hours) || hours <= 0) {
+                  alert('Введите положительное число часов')
+                  return
+                }
+                const remindAt = new Date(Date.now() + hours * 3_600_000)
+                await save(addReminderInHours(data, task.id, hours))
+                alert(
+                  `Напоминание добавлено на ${remindAt.toLocaleString('ru-RU', {
+                    day: 'numeric',
+                    month: 'long',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}`
+                )
+                setShowReminderForm(false)
+              }}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs text-white"
+            >
+              Добавить
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowReminderForm(false)}
+              className="rounded-lg px-2 py-1.5 text-xs text-gray-500 hover:text-gray-300"
+            >
+              Отмена
+            </button>
+          </div>
+        )}
 
         <div>
           <label className="mb-1 block text-xs text-gray-500">Повторение</label>
@@ -598,32 +661,72 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={async () => {
-            const name = prompt('Название шаблона', task.title)
-            if (!name?.trim()) return
-            const tagIds = data.taskTags
-              .filter((l) => l.taskId === task.id)
-              .map((l) => l.tagId)
-            const checklistTexts = checklist.map((c) => c.text)
-            await save(
-              createTemplate(data, {
-                name: name.trim(),
-                title: task.title,
-                description: task.description,
-                priority: task.priority,
-                projectId: task.projectId,
-                tagIds,
-                checklistTexts
-              })
-            )
-            onSaveAsTemplate()
-          }}
-          className="w-full rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
-        >
-          Сохранить как шаблон
-        </button>
+        {showTemplateDialog ? (
+          <div className="rounded-lg border border-surface-border bg-surface/40 p-3">
+            <label className="mb-1 block text-xs text-gray-500">Название шаблона</label>
+            <input
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.form?.requestSubmit()
+              }}
+              placeholder={task.title}
+              className="mb-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const name = templateName.trim() || task.title
+                  if (!name) return
+                  const tagIds = data.taskTags
+                    .filter((l) => l.taskId === task.id)
+                    .map((l) => l.tagId)
+                  const checklistTexts = checklist.map((c) => c.text)
+                  await save(
+                    createTemplate(data, {
+                      name,
+                      title: task.title,
+                      description: task.description,
+                      priority: task.priority,
+                      projectId: task.projectId,
+                      tagIds,
+                      checklistTexts
+                    })
+                  )
+                  setShowTemplateDialog(false)
+                  setTemplateName('')
+                  alert('Шаблон сохранён. Откройте Настройки → Шаблоны задач')
+                  onSaveAsTemplate()
+                }}
+                className="rounded-lg bg-accent px-3 py-1.5 text-xs text-white"
+              >
+                Сохранить
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTemplateDialog(false)
+                  setTemplateName('')
+                }}
+                className="rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setTemplateName(task.title)
+              setShowTemplateDialog(true)
+            }}
+            className="w-full rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300 hover:bg-surface"
+          >
+            Сохранить как шаблон
+          </button>
+        )}
 
         <div>
           <label className="mb-2 block text-xs text-gray-500">Подзадачи</label>

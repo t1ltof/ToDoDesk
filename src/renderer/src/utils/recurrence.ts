@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { DataPayload, Recurrence, Task } from '../../../shared/schema'
+import { localDateKey } from './calendarUtils'
 import { syncReminder } from './taskHelpers'
 
 function isWeekend(date: Date): boolean {
@@ -26,7 +27,7 @@ function advanceDueDate(dueDate: string, recurrence: Recurrence): string {
   if (recurrence === 'monthly') date.setMonth(date.getMonth() + 1)
   if (recurrence === 'weekdays') advanceToNextWeekday(date)
   if (recurrence === 'weekends') advanceToNextWeekend(date)
-  return date.toISOString().slice(0, 10)
+  return localDateKey(date)
 }
 
 export function nextDueDate(
@@ -70,6 +71,7 @@ export function completeTask(data: DataPayload, taskId: string): DataPayload {
       status: 'todo',
       priority: task.priority,
       dueDate: newDue,
+      dueDateEnd: task.dueDateEnd,
       dueTime: task.dueTime,
       timeOfDay: task.timeOfDay,
       completedAt: null,

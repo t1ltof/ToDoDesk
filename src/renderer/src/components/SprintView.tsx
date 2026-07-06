@@ -8,6 +8,7 @@ import {
   getSprintProgress,
   updateSprint
 } from '../utils/sprintHelpers'
+import { addDaysToDateKey, localDateKey } from '../utils/calendarUtils'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
@@ -16,12 +17,8 @@ export default function SprintView(): JSX.Element {
   const [selectedSprintId, setSelectedSprintId] = useState<string | null>(data.sprints[0]?.id ?? null)
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10))
-  const [endDate, setEndDate] = useState(() => {
-    const date = new Date()
-    date.setDate(date.getDate() + 13)
-    return date.toISOString().slice(0, 10)
-  })
+  const [startDate, setStartDate] = useState(localDateKey())
+  const [endDate, setEndDate] = useState(() => addDaysToDateKey(localDateKey(), 13))
   const [goal, setGoal] = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
 

@@ -8,12 +8,14 @@ interface BoardAddTaskDialogProps {
   onClose: () => void
   onSelect: (task: Task) => void
   existingTaskIds: Set<string>
+  filterProjectId?: string | null
 }
 
 export default function BoardAddTaskDialog({
   onClose,
   onSelect,
-  existingTaskIds
+  existingTaskIds,
+  filterProjectId = null
 }: BoardAddTaskDialogProps): JSX.Element {
   const { data } = useAppStore()
   const [query, setQuery] = useState('')
@@ -23,9 +25,10 @@ export default function BoardAddTaskDialog({
     return data.tasks
       .filter((task) => task.parentId === null)
       .filter((task) => !existingTaskIds.has(task.id))
+      .filter((task) => filterProjectId === null || task.projectId === filterProjectId)
       .filter((task) => !q || task.title.toLowerCase().includes(q))
       .sort((a, b) => a.title.localeCompare(b.title, 'ru'))
-  }, [data.tasks, existingTaskIds, query])
+  }, [data.tasks, existingTaskIds, filterProjectId, query])
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">

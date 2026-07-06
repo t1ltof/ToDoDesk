@@ -1,10 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { DataPayload } from '../../../shared/schema'
+import { todayKey } from './calendarUtils'
 import { createTag } from './taskHelpers'
-
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 function overdueDays(dueDate: string): number {
   const today = todayKey()

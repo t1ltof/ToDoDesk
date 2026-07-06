@@ -40,6 +40,7 @@ export const taskSchema = z.object({
   status: statusSchema,
   priority: prioritySchema,
   dueDate: z.string().nullable(),
+  dueDateEnd: z.string().nullable().default(null),
   dueTime: z.string().nullable().default(null),
   timeOfDay: timeOfDaySchema.nullable().default(null),
   completedAt: z.string().nullable(),
@@ -130,7 +131,8 @@ export const boardNodeSchema = z.object({
   height: z.number().positive().default(130),
   color: z.string().default('#d97706'),
   style: boardNodeStyleSchema.default('card'),
-  groupId: z.string().uuid().nullable().default(null)
+  groupId: z.string().uuid().nullable().default(null),
+  imagePath: z.string().nullable().default(null)
 })
 
 export const boardLinkSchema = z.object({
@@ -221,6 +223,7 @@ export const settingsSchema = z.object({
   boardBackgroundColor: z.string().default('#3d2b1f'),
   theme: themeSchema.default('dark'),
   fontSize: fontSizeSchema.default('normal'),
+  quietHoursEnabled: z.boolean().default(true),
   quietHoursStart: z.string().nullable().default('23:00'),
   quietHoursEnd: z.string().nullable().default('08:00'),
   autoBackupEnabled: z.boolean().default(true),
@@ -358,6 +361,7 @@ function migrateTask(task: Partial<Task>): Task {
     ...task,
     description: task.description ?? '',
     recurrence: task.recurrence ?? 'none',
+    dueDateEnd: task.dueDateEnd ?? null,
     dueTime: task.dueTime ?? null,
     timeOfDay: task.timeOfDay ?? null,
     recurrenceExceptions: task.recurrenceExceptions ?? [],
@@ -377,7 +381,8 @@ function migrateBoardNode(node: Partial<BoardNode>): BoardNode {
     style: node.style ?? 'card',
     groupId: node.groupId ?? null,
     notes: node.notes ?? '',
-    taskId: node.taskId ?? null
+    taskId: node.taskId ?? null,
+    imagePath: node.imagePath ?? null
   } as BoardNode
 }
 

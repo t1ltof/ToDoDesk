@@ -61,6 +61,7 @@ import {
   normalizeBoardBackground
 } from '../utils/boardBackground'
 import { getChildTasks } from '../store/useAppStore'
+import { attachmentSrcUrl } from '../utils/attachmentHelpers'
 import { createRootTask } from '../utils/taskHelpers'
 import BoardAddTaskDialog from './BoardAddTaskDialog'
 import BoardInputDialog from './BoardInputDialog'
@@ -166,6 +167,14 @@ function BoardNodeCard({
     }
   }
 
+  const handlePickPhoto = async (): Promise<void> => {
+    const picked = await window.tododesk.pickAttachmentFile()
+    if (!picked) return
+    await persist(
+      withBoardHistory(data, updateBoardNode(data, node.id, { imagePath: picked.filePath }))
+    )
+  }
+
   const accent = task ? getProjectColor(data.projects, task.projectId) : node.color
   const styleClasses = getNodeStyleClasses(node.style)
   const isAltStyle = node.style !== 'card'
@@ -190,7 +199,7 @@ function BoardNodeCard({
         node.style === 'sticker' && 'rounded-sm',
         node.style === 'photo' && 'rounded-md',
         node.style === 'document' && 'rounded-none',
-        selected || linkSource
+        !isDragging && (selected || linkSource)
           ? 'border-amber-400 shadow-amber-900/30'
           : node.style === 'card'
             ? 'border-amber-900/40 shadow-black/40'
@@ -372,6 +381,29 @@ function BoardNodeCard({
               <p className={clsx('line-clamp-2 text-xs leading-relaxed', isAltStyle ? 'opacity-70' : 'text-gray-400')}>
                 {node.notes}
               </p>
+            )}
+
+            {node.style === 'photo' && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handlePickPhoto()
+                  }}
+                  className="rounded border border-surface-border/60 bg-surface/80 px-2 py-1 text-xs hover:bg-surface-border/60"
+                >
+                  Выбрать фото
+                </button>
+                {node.imagePath && (
+                  <img
+                    src={attachmentSrcUrl(node.imagePath)}
+                    alt={node.title}
+                    className="max-h-32 w-full rounded object-cover"
+                    draggable={false}
+                  />
+                )}
+              </div>
             )}
 
             {task && (
@@ -1199,6 +1231,13 @@ export default function BoardView(): JSX.Element {
   }
 
   const activeProjects = data.projects.filter((p) => !p.archived)
+  const boardFilterProjectId = boardFilter.startsWith('project:')
+    ? boardFilter.replace('project:', '')
+    : null
+
+  useEffect(() => {
+    setSelectedTaskId(null)
+  }, [boardFilter, setSelectedTaskId])
 
   return (
     <section
@@ -1535,10 +1574,28 @@ export default function BoardView(): JSX.Element {
           )}
 
           {filteredNodes.length === 0 && allNodes.length > 0 && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <p className="rounded-lg bg-black/30 px-4 py-2 text-sm text-amber-100/70">
-                Нет блоков по выбранному фильтру
-              </p>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-900/30 bg-black/30 px-6 py-5 text-center">
+                <p className="text-sm text-amber-100/70">Нет блоков по выбранному фильтру</p>
+                {boardFilterProjectId && (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddTaskOpen(true)}
+                      className="rounded-lg border border-surface-border bg-surface-elevated px-3 py-1.5 text-sm hover:bg-surface-border/60"
+                    >
+                      Добавить из проекта
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewTaskOpen(true)}
+                      className="rounded-lg border border-surface-border bg-surface-elevated px-3 py-1.5 text-sm hover:bg-surface-border/60"
+                    >
+                      Новая задача
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1581,7 +1638,7 @@ export default function BoardView(): JSX.Element {
         })()}
 
         <BoardMinimap
-          nodes={allNodes}
+          nodes={filteredNodes}
           pan={pan}
           zoom={zoom}
           containerSize={containerSize}
@@ -1609,6 +1666,7 @@ export default function BoardView(): JSX.Element {
         <BoardNewTaskDialog
           onClose={() => setNewTaskOpen(false)}
           onCreate={(title, projectId) => void addNewTask(title, projectId)}
+          defaultProjectId={boardFilterProjectId}
         />
       )}
 
@@ -1617,6 +1675,7 @@ export default function BoardView(): JSX.Element {
           onClose={() => setAddTaskOpen(false)}
           onSelect={(task) => void addTask(task)}
           existingTaskIds={existingTaskIds}
+          filterProjectId={boardFilterProjectId}
         />
       )}
 

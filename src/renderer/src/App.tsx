@@ -66,17 +66,23 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (loading || smartRulesBootstrapped.current) return
-    smartRulesBootstrapped.current = true
 
-    const withRules = ensureOverdueSmartRule(data)
-    const applied = applySmartRules(withRules)
-    if (JSON.stringify(applied) !== JSON.stringify(data)) {
-      void persist(applied)
-    } else if (withRules.smartRules.length !== data.smartRules.length) {
-      void persist(withRules)
-    }
+    const timeout = window.setTimeout(() => {
+      if (smartRulesBootstrapped.current) return
+      smartRulesBootstrapped.current = true
+
+      const currentData = useAppStore.getState().data
+      const withRules = ensureOverdueSmartRule(currentData)
+      const applied = applySmartRules(withRules)
+      if (JSON.stringify(applied) !== JSON.stringify(currentData)) {
+        void useAppStore.getState().persist(applied)
+      } else if (withRules.smartRules.length !== currentData.smartRules.length) {
+        void useAppStore.getState().persist(withRules)
+      }
+    }, 1500)
 
     const interval = window.setInterval(() => {
+      if (!smartRulesBootstrapped.current) return
       const current = useAppStore.getState().data
       const next = applySmartRules(current)
       if (JSON.stringify(next) !== JSON.stringify(current)) {
@@ -84,8 +90,11 @@ export default function App(): JSX.Element {
       }
     }, 60_000)
 
-    return () => window.clearInterval(interval)
-  }, [loading, data, persist])
+    return () => {
+      window.clearTimeout(timeout)
+      window.clearInterval(interval)
+    }
+  }, [loading])
 
   useEffect(() => {
     if (activeView === 'weekly-review') {
@@ -96,6 +105,13 @@ export default function App(): JSX.Element {
     }
     previousViewRef.current = activeView
   }, [activeView])
+
+  useEffect(() => {
+    if (!selectedTaskId) return
+    if (!data.tasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId(null)
+    }
+  }, [selectedTaskId, data.tasks, setSelectedTaskId])
 
   useEffect(() => {
     const unsubData = window.tododesk.onDataUpdated((updated) => setData(updated))

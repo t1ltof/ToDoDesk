@@ -5,23 +5,25 @@ import { sortProjects, useAppStore } from '../store/useAppStore'
 interface BoardNewTaskDialogProps {
   onClose: () => void
   onCreate: (title: string, projectId: string | null) => void
+  defaultProjectId?: string | null
 }
 
 export default function BoardNewTaskDialog({
   onClose,
-  onCreate
+  onCreate,
+  defaultProjectId = null
 }: BoardNewTaskDialogProps): JSX.Element {
   const { data } = useAppStore()
   const [title, setTitle] = useState('')
-  const [projectId, setProjectId] = useState<string>('')
+  const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '')
   const inputRef = useRef<HTMLInputElement>(null)
   const projects = sortProjects(data.projects)
 
   useEffect(() => {
     setTitle('')
-    setProjectId('')
+    setProjectId(defaultProjectId ?? '')
     setTimeout(() => inputRef.current?.focus(), 50)
-  }, [])
+  }, [defaultProjectId])
 
   const handleSubmit = (): void => {
     const trimmed = title.trim()

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { Task } from '../../../shared/schema'
-import { todayKey } from '../utils/calendarUtils'
+import { localDateKey, todayKey } from '../utils/calendarUtils'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
@@ -9,7 +9,7 @@ function getTimelineDays(count = 30): string[] {
   return Array.from({ length: count }, (_, index) => {
     const date = new Date(start)
     date.setDate(start.getDate() + index)
-    return date.toISOString().slice(0, 10)
+    return localDateKey(date)
   })
 }
 

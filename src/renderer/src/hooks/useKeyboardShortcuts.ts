@@ -27,39 +27,39 @@ export function useKeyboardShortcuts(
       const typing =
         target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
 
-      if (event.ctrlKey && event.key === 'z') {
+      if (event.ctrlKey && event.code === 'KeyZ') {
         event.preventDefault()
         void undo()
         return
       }
 
-      if (event.ctrlKey && (event.key === 'n' || event.key === 'N')) {
+      if (event.ctrlKey && event.code === 'KeyN') {
         event.preventDefault()
         onQuickAdd()
         return
       }
 
-      if (event.ctrlKey && (event.key === 'f' || event.key === 'F')) {
+      if (event.ctrlKey && event.code === 'KeyF') {
         event.preventDefault()
         onGlobalSearch()
         return
       }
 
-      if (event.ctrlKey && (event.key === 'k' || event.key === 'K')) {
+      if (event.ctrlKey && event.code === 'KeyK') {
         event.preventDefault()
         onCommandPalette()
         return
       }
 
-      if (event.ctrlKey && event.shiftKey && (event.key === 'v' || event.key === 'V')) {
+      if (event.ctrlKey && event.shiftKey && event.code === 'KeyV') {
         event.preventDefault()
         onPasteTasks?.()
         return
       }
 
-      if (event.ctrlKey && event.key >= '1' && event.key <= '7') {
+      if (event.ctrlKey && /^Digit[1-7]$/.test(event.code)) {
         event.preventDefault()
-        setActiveView(VIEW_SHORTCUTS[Number(event.key) - 1])
+        setActiveView(VIEW_SHORTCUTS[Number(event.code.replace('Digit', '')) - 1])
         return
       }
 

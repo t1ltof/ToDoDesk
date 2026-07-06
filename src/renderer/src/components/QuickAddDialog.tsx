@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { todayKey } from '../utils/calendarUtils'
 import { createRootTask } from '../utils/taskHelpers'
 import { useAppStore } from '../store/useAppStore'
 
@@ -28,7 +29,7 @@ export default function QuickAddDialog({ open, onClose }: QuickAddDialogProps): 
       return
     }
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayKey()
     const next = createRootTask(data, {
       title: trimmed,
       projectId: null,

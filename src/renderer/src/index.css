@@ -163,3 +163,20 @@ body,
 .font-size-large .text-xl {
   font-size: 24px;
 }
+
+button:focus {
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}

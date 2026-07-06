@@ -1,3 +1,4 @@
+import { Columns3, List, Search } from 'lucide-react'
 import type { ViewId } from '../../../shared/schema'
 import { filterTasksForView, useAppStore } from '../store/useAppStore'
 import { completeTask, reopenTask } from '../utils/recurrence'
@@ -8,8 +9,10 @@ interface KanbanViewProps {
 }
 
 export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
-  const { data, persist, setSelectedTaskId, searchQuery } = useAppStore()
+  const { data, persist, setSelectedTaskId, searchQuery, setSearchQuery, setActiveView } =
+    useAppStore()
   const projectId = view.replace('kanban:', '')
+  const projectListView = `project:${projectId}` as ViewId
   const project = data.projects.find((p) => p.id === projectId)
 
   const todoTasks = filterTasksForView(data, view, searchQuery).filter((t) => t.status === 'todo')
@@ -58,8 +61,39 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
 
   return (
     <section className="flex h-full flex-1 flex-col">
-      <header className="border-b border-surface-border px-6 py-4">
-        <h2 className="text-xl font-semibold">Kanban — {project?.name ?? 'Проект'}</h2>
+      <header className="flex items-center justify-between border-b border-surface-border px-6 py-4">
+        <div>
+          <h2 className="text-xl font-semibold">{project?.name ?? 'Проект'}</h2>
+          <p className="text-sm text-gray-400">Kanban</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-surface-border">
+            <button
+              type="button"
+              onClick={() => setActiveView(projectListView)}
+              className="p-2 text-gray-400 hover:text-gray-200"
+              title="Список"
+            >
+              <List size={16} />
+            </button>
+            <button
+              type="button"
+              className="bg-accent-muted p-2 text-blue-300"
+              title="Kanban"
+            >
+              <Columns3 size={16} />
+            </button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-gray-500" size={16} />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск..."
+              className="rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
+            />
+          </div>
+        </div>
       </header>
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         <Column title={`К выполнению (${todoTasks.length})`} tasks={todoTasks} done={false} />

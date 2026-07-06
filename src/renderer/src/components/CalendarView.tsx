@@ -5,17 +5,22 @@ import {
   DAY_NAMES,
   formatDayLabel,
   formatMonthYear,
+  formatWeekRange,
   getMonthGrid,
   getWeekDays,
   getWeekKey,
+  localDateKey,
+  parseLocalDate,
   todayKey
 } from '../utils/calendarUtils'
+import { buildCalendarTasksByDate, getCalendarRangeStartEnd } from '../utils/calendarTasks'
 import { createRootTask, updateTask } from '../utils/taskHelpers'
 import { addWeeklyGoal, deleteWeeklyGoal, toggleWeeklyGoal } from '../utils/weeklyGoalsHelpers'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
 type CalendarMode = 'day' | 'week' | 'month'
+type GoalsFilter = 'active' | 'completed'
 const MAX_VISIBLE_TASKS = 3
 
 const TIME_OF_DAY_SECTIONS: { key: TimeOfDay; label: string; hint: string }[] = [
@@ -76,20 +81,24 @@ export default function CalendarView(): JSX.Element {
   const [selectedDate, setSelectedDate] = useState(todayKey())
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newGoalText, setNewGoalText] = useState('')
+  const [goalsFilter, setGoalsFilter] = useState<GoalsFilter>('active')
 
   const today = todayKey()
 
   const displayDate = useMemo(() => {
     const d = new Date()
     d.setDate(d.getDate() + dayOffset)
-    return d.toISOString().slice(0, 10)
+    return localDateKey(d)
   }, [dayOffset])
 
   const currentWeekKey = useMemo(() => {
+    if (mode === 'day') {
+      return getWeekKey(parseLocalDate(displayDate))
+    }
     const d = new Date()
-    d.setDate(d.getDate() + (mode === 'day' ? dayOffset : weekOffset * 7))
+    d.setDate(d.getDate() + weekOffset * 7)
     return getWeekKey(d)
-  }, [mode, dayOffset, weekOffset])
+  }, [mode, displayDate, weekOffset])
 
   const weekGoals = useMemo(
     () => data.weeklyGoals.filter((g) => g.weekKey === currentWeekKey),
@@ -110,19 +119,26 @@ export default function CalendarView(): JSX.Element {
 
   const monthCells = useMemo(() => getMonthGrid(year, month), [year, month])
 
-  const tasksByDate = useMemo(() => {
-    const map = new Map<string, Task[]>()
-    for (const task of data.tasks) {
-      if (task.status !== 'todo' || !task.dueDate) continue
-      const list = map.get(task.dueDate) ?? []
-      list.push(task)
-      map.set(task.dueDate, list)
-    }
-    for (const [, list] of map) {
-      list.sort((a, b) => a.sortOrder - b.sortOrder)
-    }
-    return map
-  }, [data.tasks])
+  const calendarRange = useMemo(
+    () =>
+      getCalendarRangeStartEnd(mode, {
+        displayDate,
+        weekDays,
+        monthCells
+      }),
+    [mode, displayDate, weekDays, monthCells]
+  )
+
+  const tasksByDate = useMemo(
+    () => buildCalendarTasksByDate(data, calendarRange.start, calendarRange.end),
+    [data, calendarRange.start, calendarRange.end]
+  )
+
+  const filteredWeekGoals = useMemo(
+    () =>
+      weekGoals.filter((g) => (goalsFilter === 'active' ? !g.completed : g.completed)),
+    [weekGoals, goalsFilter]
+  )
 
   const overdueTasks = useMemo(
     () => data.tasks.filter((t) => t.status === 'todo' && t.dueDate && t.dueDate < today),
@@ -229,15 +245,38 @@ export default function CalendarView(): JSX.Element {
     <section className="flex h-full flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="border-b border-surface-border bg-surface-elevated/50 px-6 py-3">
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <Target size={16} className="text-amber-400" />
             <h3 className="text-sm font-medium">Цели недели</h3>
+            <span className="text-xs text-gray-500">{formatWeekRange(currentWeekKey)}</span>
             <span className="text-xs text-gray-500">
               {weekGoals.filter((g) => g.completed).length} / {weekGoals.length}
             </span>
+            <div className="ml-auto flex rounded-lg border border-surface-border text-xs">
+              <button
+                type="button"
+                onClick={() => setGoalsFilter('active')}
+                className={clsx(
+                  'px-2.5 py-1',
+                  goalsFilter === 'active' && 'bg-accent-muted text-blue-300'
+                )}
+              >
+                Активные
+              </button>
+              <button
+                type="button"
+                onClick={() => setGoalsFilter('completed')}
+                className={clsx(
+                  'px-2.5 py-1',
+                  goalsFilter === 'completed' && 'bg-accent-muted text-blue-300'
+                )}
+              >
+                Выполненные
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {weekGoals.map((goal) => (
+            {filteredWeekGoals.map((goal) => (
               <div
                 key={goal.id}
                 className={clsx(
@@ -257,7 +296,7 @@ export default function CalendarView(): JSX.Element {
                 >
                   {goal.completed && <Check size={12} />}
                 </button>
-                <span className="max-w-[200px] truncate">{goal.text}</span>
+                <span title={goal.text}>{goal.text}</span>
                 <button
                   type="button"
                   onClick={() => void persist(deleteWeeklyGoal(data, goal.id))}
@@ -326,18 +365,20 @@ export default function CalendarView(): JSX.Element {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setWeekOffset(0)
-                setMonthOffset(0)
-                setDayOffset(0)
-                setSelectedDate(today)
-              }}
-              className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-gray-300"
-            >
-              Сегодня
-            </button>
+            {mode !== 'day' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setWeekOffset(0)
+                  setMonthOffset(0)
+                  setDayOffset(0)
+                  setSelectedDate(today)
+                }}
+                className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-gray-300"
+              >
+                Сегодня
+              </button>
+            )}
 
             <button
               type="button"
@@ -390,7 +431,7 @@ export default function CalendarView(): JSX.Element {
                         isSelected && !isToday && 'ring-2 ring-accent'
                       )}
                     >
-                      {new Date(`${day}T12:00:00`).getDate()}
+                      {parseLocalDate(day).getDate()}
                     </p>
                     {tasks.length > 0 && (
                       <p className="mt-1 text-[10px] text-gray-500">{tasks.length} задач</p>
@@ -408,7 +449,7 @@ export default function CalendarView(): JSX.Element {
                   </div>
                 </>,
                 clsx(
-                  'flex min-h-0 flex-col rounded-xl border p-2 transition',
+                  'flex min-h-0 flex-1 flex-col rounded-xl border p-2 transition',
                   isSelected ? 'border-accent bg-accent-muted/10' : 'border-surface-border bg-surface-elevated',
                   isToday && !isSelected && 'border-accent/50'
                 )
@@ -468,7 +509,7 @@ export default function CalendarView(): JSX.Element {
                     </div>
                   </>,
                   clsx(
-                    'flex min-h-0 flex-col rounded-lg border p-1 transition',
+                    'flex min-h-[5.5rem] flex-col rounded-lg border p-1 transition',
                     cell.isCurrentMonth
                       ? isSelected
                         ? 'border-accent bg-accent-muted/15'

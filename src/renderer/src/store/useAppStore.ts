@@ -9,6 +9,7 @@ import type {
   ViewId
 } from '../../../shared/schema'
 import { createEmptyData } from '../../../shared/schema'
+import { addDaysToDateKey, localDateKey } from '../utils/calendarUtils'
 import { applyQuickFilter, sortTasksWithPins } from '../utils/taskFilters'
 
 interface AppState {
@@ -107,7 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 }))
 
 export function todayKey(): string {
-  return new Date().toISOString().slice(0, 10)
+  return localDateKey()
 }
 
 function matchesSearch(task: Task, query: string): boolean {
@@ -217,9 +218,7 @@ export function formatCompletedDate(iso: string | null): string | null {
 export function formatDueDateLabel(dueDate: string | null): string | null {
   if (!dueDate) return null
   const today = todayKey()
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowKey = tomorrow.toISOString().slice(0, 10)
+  const tomorrowKey = addDaysToDateKey(today, 1)
   if (dueDate === today) return 'Сегодня'
   if (dueDate === tomorrowKey) return 'Завтра'
   if (dueDate < today) return 'Просрочено'
@@ -229,18 +228,6 @@ export function formatDueDateLabel(dueDate: string | null): string | null {
   )
   if (diff <= 7) return `Через ${diff} дн.`
   return dueDate
-}
-
-export function getWeekDays(baseDate = new Date()): string[] {
-  const day = baseDate.getDay()
-  const mondayOffset = day === 0 ? -6 : 1 - day
-  const monday = new Date(baseDate)
-  monday.setDate(baseDate.getDate() + mondayOffset)
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    return d.toISOString().slice(0, 10)
-  })
 }
 
 export function getStats(data: DataPayload) {

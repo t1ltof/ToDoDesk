@@ -38,3 +38,9 @@ export function getTaskAttachments(data: DataPayload, taskId: string): TaskAttac
     .filter((item) => item.taskId === taskId)
     .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
 }
+
+/** URL for displaying a stored attachment in the renderer (custom protocol). */
+export function attachmentSrcUrl(relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/')
+  return `tododesk-attachment://${encodeURIComponent(normalized)}`
+}

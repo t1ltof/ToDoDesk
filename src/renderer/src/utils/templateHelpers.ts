@@ -34,6 +34,7 @@ export function applyTemplate(data: DataPayload, templateId: string): DataPayloa
     status: 'todo' as const,
     priority: template.priority,
     dueDate: null,
+    dueDateEnd: null,
     dueTime: null,
     timeOfDay: null,
     completedAt: null,

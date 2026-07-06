@@ -12,6 +12,8 @@ import {
 } from '../store/useAppStore'
 import clsx from 'clsx'
 
+type DropPosition = 'before' | 'after'
+
 interface TaskItemProps {
   task: Task
   depth?: number
@@ -21,7 +23,8 @@ interface TaskItemProps {
   bulkSelected?: boolean
   onBulkToggle?: (taskId: string) => void
   onDragStart?: (taskId: string) => void
-  onDrop?: (targetId: string) => void
+  onDragOverPosition?: (targetId: string, position: DropPosition) => void
+  onDrop?: (targetId: string, position: DropPosition) => void
 }
 
 export default function TaskItem({
@@ -33,6 +36,7 @@ export default function TaskItem({
   bulkSelected = false,
   onBulkToggle,
   onDragStart,
+  onDragOverPosition,
   onDrop
 }: TaskItemProps): JSX.Element {
   const { data, persist, selectedTaskId, setSelectedTaskId } = useAppStore()
@@ -40,6 +44,7 @@ export default function TaskItem({
   const children = getChildTasks(data, task.id, childStatus)
   const [expanded, setExpanded] = useState(true)
   const [dragOver, setDragOver] = useState(false)
+  const [dropPosition, setDropPosition] = useState<DropPosition>('before')
   const tags = getTaskTags(data, task.id)
   const selected = selectedTaskId === task.id
   const completedLabel = formatCompletedDate(task.completedAt)
@@ -61,46 +66,61 @@ export default function TaskItem({
 
   const dueLabel = formatDueDateLabel(task.dueDate)
 
-  const handleDragStart = (event: DragEvent): void => {
+  const handleGripDragStart = (event: DragEvent): void => {
     if (!draggable || depth > 0) return
     event.dataTransfer.effectAllowed = 'move'
+    event.stopPropagation()
     onDragStart?.(task.id)
+  }
+
+  const resolveDropPosition = (event: DragEvent): DropPosition => {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
   }
 
   const handleDragOver = (event: DragEvent): void => {
     if (!draggable || depth > 0) return
     event.preventDefault()
+    const position = resolveDropPosition(event)
     setDragOver(true)
+    setDropPosition(position)
+    onDragOverPosition?.(task.id, position)
   }
 
   const handleDrop = (event: DragEvent): void => {
     if (!draggable || depth > 0) return
     event.preventDefault()
+    const position = resolveDropPosition(event)
     setDragOver(false)
-    onDrop?.(task.id)
+    onDrop?.(task.id, position)
+  }
+
+  const handleDragLeave = (event: DragEvent): void => {
+    const related = event.relatedTarget as Node | null
+    if (related && event.currentTarget.contains(related)) return
+    setDragOver(false)
   }
 
   return (
-    <div>
+    <div className="transition-all duration-200">
       <div
         role="button"
         tabIndex={0}
-        draggable={draggable && depth === 0}
-        onDragStart={handleDragStart}
         onDragEnd={() => setDragOver(false)}
         onDragOver={handleDragOver}
-        onDragLeave={() => setDragOver(false)}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => setSelectedTaskId(task.id)}
         onKeyDown={(event) => {
           if (event.key === 'Enter') setSelectedTaskId(task.id)
         }}
         className={clsx(
-          'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition',
+          'relative flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-all duration-200',
           selected
             ? 'border-accent bg-accent-muted/40'
             : 'border-surface-border bg-surface-elevated hover:border-gray-600',
-          dragOver && 'border-accent'
+          dragOver && dropPosition === 'before' && 'border-t-2 border-t-accent',
+          dragOver && dropPosition === 'after' && 'border-b-2 border-b-accent'
         )}
         style={{ marginLeft: depth * 20 }}
       >
@@ -114,9 +134,17 @@ export default function TaskItem({
               className="mt-0.5"
             />
           )}
-          {draggable && depth === 0 && (
-            <GripVertical size={16} className="mt-0.5 text-gray-500" />
-          )}
+          {draggable && depth === 0 ? (
+            <span
+              draggable
+              onDragStart={handleGripDragStart}
+              onClick={(event) => event.stopPropagation()}
+              className="mt-0.5 cursor-grab text-gray-500 active:cursor-grabbing"
+              title="Перетащить"
+            >
+              <GripVertical size={16} />
+            </span>
+          ) : null}
           {children.length > 0 ? (
             <button
               type="button"

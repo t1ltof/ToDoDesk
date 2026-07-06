@@ -12,7 +12,7 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { QuickFilter, ViewId } from '../../../shared/schema'
 import {
   bulkAddTag,
@@ -24,6 +24,7 @@ import {
 } from '../utils/bulkActions'
 import { clearCompletedTasks, createRootTask, reorderTasks } from '../utils/taskHelpers'
 import { filterTasksForView, sortProjects, useAppStore } from '../store/useAppStore'
+import { todayKey } from '../utils/calendarUtils'
 import ProjectDialog from './ProjectDialog'
 import TaskItem from './TaskItem'
 import clsx from 'clsx'
@@ -77,7 +78,8 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
   const [showProjectDialog, setShowProjectDialog] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [bulkMode, setBulkMode] = useState(false)
-
+  const [dragOverEnd, setDragOverEnd] = useState(false)
+  const newTaskInputRef = useRef<HTMLInputElement>(null)
 
   const tasks = useMemo(
     () => filterTasksForView(data, activeView, searchQuery, quickFilter),
@@ -90,6 +92,13 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
   const projects = sortProjects(data.projects)
   const hasBulkSelection = bulkSelectedTaskIds.length > 0
 
+  const focusNewTaskInput = (): void => {
+    requestAnimationFrame(() => {
+      window.focus()
+      newTaskInputRef.current?.focus()
+    })
+  }
+
   const addTask = async (): Promise<void> => {
     const title = newTaskTitle.trim()
     if (!title || isCompletedView) return
@@ -100,7 +109,7 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
         ? null
         : null
 
-    const dueDate = activeView === 'today' ? new Date().toISOString().slice(0, 10) : null
+    const dueDate = activeView === 'today' ? todayKey() : null
     await persist(createRootTask(data, { title, projectId, dueDate }))
     setNewTaskTitle('')
   }
@@ -111,15 +120,38 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
     await persist(clearCompletedTasks(data))
   }
 
-  const handleDrop = async (targetId: string): Promise<void> => {
+  const handleDrop = async (
+    targetId: string,
+    dropPosition: 'before' | 'after'
+  ): Promise<void> => {
     if (!draggingId || draggingId === targetId) return
     const ids = tasks.map((t) => t.id)
     const from = ids.indexOf(draggingId)
-    const to = ids.indexOf(targetId)
-    if (from < 0 || to < 0) return
+    if (from < 0) return
+
     const reordered = [...ids]
     reordered.splice(from, 1)
-    reordered.splice(to, 0, draggingId)
+
+    const to = reordered.indexOf(targetId)
+    if (to < 0) return
+
+    const insertAt = dropPosition === 'after' ? to + 1 : to
+    reordered.splice(insertAt, 0, draggingId)
+
+    await persist(reorderTasks(data, reordered))
+    setDraggingId(null)
+  }
+
+  const handleDropAtEnd = async (): Promise<void> => {
+    if (!draggingId) return
+    const ids = tasks.map((t) => t.id)
+    const from = ids.indexOf(draggingId)
+    if (from < 0) return
+
+    const reordered = [...ids]
+    reordered.splice(from, 1)
+    reordered.push(draggingId)
+
     await persist(reorderTasks(data, reordered))
     setDraggingId(null)
   }
@@ -129,6 +161,7 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
     await persist(action())
     clearBulkSelection()
     setBulkMode(false)
+    focusNewTaskInput()
   }
 
   const handleBulkMove = async (): Promise<void> => {
@@ -186,6 +219,7 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
   const exitBulkMode = (): void => {
     setBulkMode(false)
     clearBulkSelection()
+    focusNewTaskInput()
   }
 
   return (
@@ -289,6 +323,7 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
 
           <div className="flex gap-2">
             <input
+              ref={newTaskInputRef}
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void addTask()}
@@ -312,19 +347,42 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
             {isCompletedView ? 'Выполненных задач нет' : 'Задач нет — добавьте первую'}
           </div>
         ) : (
-          tasks.map((task) => (
-            <TaskItem
-              key={task.id}
-              task={task}
-              view={activeView}
-              draggable={canDrag}
-              bulkMode={bulkMode}
-              bulkSelected={bulkSelectedTaskIds.includes(task.id)}
-              onBulkToggle={toggleBulkSelectedTaskId}
-              onDragStart={setDraggingId}
-              onDrop={(id) => void handleDrop(id)}
-            />
-          ))
+          <>
+            {tasks.map((task) => (
+              <TaskItem
+                key={task.id}
+                task={task}
+                view={activeView}
+                draggable={canDrag}
+                bulkMode={bulkMode}
+                bulkSelected={bulkSelectedTaskIds.includes(task.id)}
+                onBulkToggle={toggleBulkSelectedTaskId}
+                onDragStart={setDraggingId}
+                onDrop={(id, position) => void handleDrop(id, position)}
+              />
+            ))}
+            {canDrag && (
+              <div
+                onDragOver={(event) => {
+                  if (!draggingId) return
+                  event.preventDefault()
+                  setDragOverEnd(true)
+                }}
+                onDragLeave={() => setDragOverEnd(false)}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  setDragOverEnd(false)
+                  void handleDropAtEnd()
+                }}
+                className={clsx(
+                  'h-6 rounded-lg border border-dashed transition-all duration-200',
+                  dragOverEnd
+                    ? 'border-accent bg-accent-muted/30'
+                    : 'border-transparent'
+                )}
+              />
+            )}
+          </>
         )}
       </div>
 

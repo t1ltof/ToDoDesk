@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ViewId } from '../../../shared/schema'
+import { todayKey } from '../utils/calendarUtils'
 import { createRootTask } from '../utils/taskHelpers'
 import { useAppStore } from '../store/useAppStore'
 
@@ -14,7 +15,7 @@ function getContextForView(view: ViewId): { projectId: string | null; dueDate: s
     return { projectId: view.replace('project:', ''), dueDate: null }
   }
   if (view === 'today') {
-    return { projectId: null, dueDate: new Date().toISOString().slice(0, 10) }
+    return { projectId: null, dueDate: todayKey() }
   }
   if (view === 'inbox') {
     return { projectId: null, dueDate: null }

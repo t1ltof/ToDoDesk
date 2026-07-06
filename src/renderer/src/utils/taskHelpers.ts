@@ -6,6 +6,7 @@ function nowIso(): string {
 }
 
 const defaultTaskFields = {
+  dueDateEnd: null,
   dueTime: null,
   timeOfDay: null,
   recurrenceExceptions: [] as string[],
@@ -82,6 +83,7 @@ export function updateTask(
       | 'description'
       | 'priority'
       | 'dueDate'
+      | 'dueDateEnd'
       | 'dueTime'
       | 'timeOfDay'
       | 'projectId'

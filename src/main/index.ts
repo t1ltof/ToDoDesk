@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
+import { pathToFileURL } from 'url'
 import {
   copyAttachmentToStorage,
   deleteAttachmentFile,
@@ -122,6 +123,19 @@ async function maybeCheckUpdates(data: DataPayload): Promise<void> {
   }
 }
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'tododesk-attachment',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
+  }
+])
+
 const startHidden = process.argv.includes('--hidden')
 const gotLock = app.requestSingleInstanceLock()
 
@@ -132,6 +146,13 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     app.setAppUserModelId('com.t1ltof.tododesk')
+
+    protocol.handle('tododesk-attachment', (request) => {
+      const relativePath = decodeURIComponent(
+        request.url.replace(/^tododesk-attachment:\/\//, '')
+      )
+      return net.fetch(pathToFileURL(getFullAttachmentPath(relativePath)).toString())
+    })
 
     ipcMain.handle('data:load', () => loadData())
     ipcMain.handle('data:save', (_, data: DataPayload) => {
