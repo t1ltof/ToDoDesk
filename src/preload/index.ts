@@ -37,6 +37,11 @@ const api: ToDoDeskApi = {
   resolveSyncConflict: (choice, localData) => ipcRenderer.invoke('sync:resolve', choice, localData),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
   openUpdateUrl: (url) => ipcRenderer.invoke('updates:open', url),
+  cloudLogin: (serverUrl, login, password) =>
+    ipcRenderer.invoke('cloud:login', serverUrl, login, password),
+  cloudLogout: () => ipcRenderer.invoke('cloud:logout'),
+  cloudStatus: () => ipcRenderer.invoke('cloud:status'),
+  cloudPullNow: () => ipcRenderer.invoke('cloud:pull'),
   onDataUpdated: (callback) => {
     const listener = (_: Electron.IpcRendererEvent, data) => callback(data)
     ipcRenderer.on('data:updated', listener)

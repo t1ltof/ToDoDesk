@@ -1,3 +1,6 @@
+import type { CloudLoginResult, CloudSessionInfo, CloudSyncResult } from './cloud'
+
+export type { CloudLoginResult, CloudSessionInfo, CloudSyncResult } from './cloud'
 import type { ImportPreview } from './import'
 import type { DataPayload } from './schema'
 import type { SyncConflictChoice, SyncConflictPayload } from './sync'
@@ -96,6 +99,10 @@ export interface ToDoDeskApi {
   ) => Promise<DataPayload | null>
   checkUpdates: () => Promise<UpdateInfo>
   openUpdateUrl: (url: string) => Promise<void>
+  cloudLogin: (serverUrl: string, login: string, password: string) => Promise<CloudLoginResult>
+  cloudLogout: () => Promise<void>
+  cloudStatus: () => Promise<CloudSessionInfo>
+  cloudPullNow: () => Promise<CloudSyncResult>
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void
   onDataLoadFailed: (callback: (payload: DataLoadFailedPayload) => void) => () => void
   onQuickAdd: (callback: () => void) => () => void
