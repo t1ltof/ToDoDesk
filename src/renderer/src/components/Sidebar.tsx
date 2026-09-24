@@ -137,7 +137,9 @@ export default function Sidebar({ onOpenSettings }: SidebarProps): JSX.Element {
             projects.map((project) => {
               const listView: ViewId = `project:${project.id}`
               const kanbanView: ViewId = `kanban:${project.id}`
-              const isActive = activeView === listView || activeView === kanbanView
+              const boardView: ViewId = `board:${project.id}`
+              const isActive =
+                activeView === listView || activeView === kanbanView || activeView === boardView
               return (
                 <div key={project.id} className={clsx('group flex items-center', compact ? 'gap-0' : 'gap-1')}>
                   <button
@@ -164,6 +166,17 @@ export default function Sidebar({ onOpenSettings }: SidebarProps): JSX.Element {
                   </button>
                   {!compact && (
                     <>
+                      <button
+                        type="button"
+                        title="Доска проекта"
+                        onClick={() => setActiveView(boardView)}
+                        className={clsx(
+                          'rounded p-1.5 opacity-0 hover:text-blue-300 group-hover:opacity-100',
+                          activeView === boardView ? 'text-blue-300 opacity-100' : 'text-gray-500'
+                        )}
+                      >
+                        <LayoutDashboard size={14} />
+                      </button>
                       <button
                         type="button"
                         title="Kanban"

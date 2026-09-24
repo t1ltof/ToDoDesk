@@ -54,7 +54,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveView: (view) => {
     set({ activeView: view, selectedTaskId: null, bulkSelectedTaskIds: [] })
     if (view.startsWith('kanban:')) set({ projectViewMode: 'kanban' })
-    if (view.startsWith('project:')) set({ projectViewMode: 'list' })
+    if (view.startsWith('project:') || view.startsWith('board:')) set({ projectViewMode: 'list' })
   },
   setProjectViewMode: (mode) => set({ projectViewMode: mode }),
   setSearchQuery: (query) => set({ searchQuery: query }),

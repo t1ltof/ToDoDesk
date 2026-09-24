@@ -37,7 +37,6 @@ import {
   exportBoardPng,
   filterBoardNodes,
   getBoardNodePreview,
-  getBoardSnapshots,
   getNodeStyleClasses,
   gridLayoutBoardNodes,
   isBoardAnimationsEnabled,
@@ -46,13 +45,15 @@ import {
   nodesIntersectingRect,
   restoreBoardSnapshot,
   saveBoardSnapshot,
+  snapshotsForBoard,
   screenToWorld,
   suggestLinkOnProximity,
   undoBoardHistory,
   updateBoardLink,
   updateBoardNode,
   withBoardHistory,
-  worldRectFromScreen
+  worldRectFromScreen,
+  type BoardKey
 } from '../utils/boardHelpers'
 import {
   BOARD_BACKGROUND_PRESETS,
@@ -163,7 +164,11 @@ function BoardNodeCard({
     if (trimmedTitle !== node.title || notes !== node.notes) {
       const current = useAppStore.getState().data
       await persist(
-        withBoardHistory(current, updateBoardNode(current, node.id, { title: trimmedTitle, notes }))
+        withBoardHistory(
+          current,
+          updateBoardNode(current, node.id, { title: trimmedTitle, notes }),
+          node.projectId ?? null
+        )
       )
     }
   }
@@ -173,7 +178,11 @@ function BoardNodeCard({
     if (!picked) return
     const current = useAppStore.getState().data
     await persist(
-      withBoardHistory(current, updateBoardNode(current, node.id, { imagePath: picked.filePath }))
+      withBoardHistory(
+        current,
+        updateBoardNode(current, node.id, { imagePath: picked.filePath }),
+        node.projectId ?? null
+      )
     )
   }
 
@@ -601,15 +610,21 @@ function BoardMinimap({
   )
 }
 
-export default function BoardView(): JSX.Element {
+interface BoardViewProps {
+  boardProjectId?: BoardKey
+}
+
+export default function BoardView({ boardProjectId = null }: BoardViewProps): JSX.Element {
   const { data, persist, setSelectedTaskId } = useAppStore()
+  const boardKey = boardProjectId ?? null
+  const boardProject = boardKey ? data.projects.find((project) => project.id === boardKey) : null
 
   const persistBoard = useCallback(
     async (next: ReturnType<typeof useAppStore.getState>['data']): Promise<void> => {
       const current = useAppStore.getState().data
-      await persist(withBoardHistory(current, next))
+      await persist(withBoardHistory(current, next, boardKey))
     },
-    [persist]
+    [persist, boardKey]
   )
   const sectionRef = useRef<HTMLElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -646,7 +661,7 @@ export default function BoardView(): JSX.Element {
   zoomRef.current = zoom
   dragRef.current = drag
 
-  const allNodes = data.boardNodes
+  const allNodes = data.boardNodes.filter((node) => (node.projectId ?? null) === boardKey)
 
   const filteredNodes = useMemo(() => {
     let nodes = allNodes
@@ -1140,7 +1155,7 @@ export default function BoardView(): JSX.Element {
     if (dialog.kind === 'link') {
       await persistBoard(updateBoardLink(current, dialog.linkId, { label: value }))
     } else if (dialog.kind === 'snapshot') {
-      await persistBoard(saveBoardSnapshot(current, value))
+      await persistBoard(saveBoardSnapshot(current, value, boardKey))
       showHint('Снимок сохранён')
     }
 
@@ -1176,14 +1191,14 @@ export default function BoardView(): JSX.Element {
     showHint('PNG экспортирован')
   }
 
-  const boardSnapshots = getBoardSnapshots(data)
+  const boardSnapshots = snapshotsForBoard(data, boardKey)
   const boardAnimations = isBoardAnimationsEnabled(data)
   const draggingNodeIds =
     drag?.kind === 'nodes' ? new Set(drag.nodeIds) : new Set<string>()
 
   const addIdea = async (): Promise<void> => {
     const center = getViewportCenter()
-    const node = createIdeaNode(center.x - 110, center.y - 65)
+    const node = createIdeaNode(center.x - 110, center.y - 65, 'Новая идея', boardKey)
     const current = useAppStore.getState().data
     await persistBoard(addBoardNode(current, node))
     setSelectedNodeIds(new Set([node.id]))
@@ -1191,7 +1206,7 @@ export default function BoardView(): JSX.Element {
 
   const handleUndoBoard = async (): Promise<void> => {
     const current = useAppStore.getState().data
-    const restored = undoBoardHistory(current)
+    const restored = undoBoardHistory(current, boardKey)
     if (!restored) {
       showHint('История доски пуста')
       return
@@ -1206,7 +1221,7 @@ export default function BoardView(): JSX.Element {
     const current = useAppStore.getState().data
     const center = getViewportCenter()
     const color = getProjectColor(current.projects, task.projectId)
-    const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color)
+    const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color, boardKey)
     await persistBoard(addBoardNode(current, node))
     setAddTaskOpen(false)
     setSelectedNodeIds(new Set([node.id]))
@@ -1215,10 +1230,11 @@ export default function BoardView(): JSX.Element {
   const addNewTask = async (title: string, projectId: string | null): Promise<void> => {
     const current = useAppStore.getState().data
     const center = getViewportCenter()
-    let next = createRootTask(current, { title, projectId, dueDate: null })
+    const taskProjectId = boardKey ?? projectId
+    let next = createRootTask(current, { title, projectId: taskProjectId, dueDate: null })
     const task = next.tasks[next.tasks.length - 1]
-    const color = getProjectColor(next.projects, projectId)
-    const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color)
+    const color = getProjectColor(next.projects, taskProjectId)
+    const node = createTaskNode(task.id, task.title, center.x - 110, center.y - 65, color, boardKey)
     next = addBoardNode(next, node)
     await persistBoard(next)
     setNewTaskOpen(false)
@@ -1273,7 +1289,9 @@ export default function BoardView(): JSX.Element {
       style={boardCanvasStyle}
     >
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-surface-border bg-surface-elevated px-4 py-3">
-        <h2 className="mr-2 text-lg font-semibold">Доска задач</h2>
+        <h2 className="mr-2 truncate text-lg font-semibold">
+          {boardProject ? `Доска: ${boardProject.name}` : 'Личная доска'}
+        </h2>
 
         <div className="flex items-center gap-1.5">
           <Filter size={14} className="text-gray-500" />

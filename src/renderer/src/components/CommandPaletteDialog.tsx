@@ -101,12 +101,22 @@ export default function CommandPaletteDialog({
       },
       {
         id: 'view-board',
-        label: 'Доска',
-        keywords: 'доска board',
+        label: 'Личная доска',
+        keywords: 'доска board личная',
         category: 'view',
         icon: LayoutDashboard,
         action: () => onSelectView('board')
       },
+      ...data.projects
+        .filter((project) => !project.archived)
+        .map((project) => ({
+          id: `view-board-${project.id}`,
+          label: `Доска: ${project.name}`,
+          keywords: `доска board ${project.name}`,
+          category: 'view' as const,
+          icon: LayoutDashboard,
+          action: () => onSelectView(`board:${project.id}`)
+        })),
       {
         id: 'view-calendar',
         label: 'Календарь',

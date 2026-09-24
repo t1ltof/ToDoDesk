@@ -12,7 +12,9 @@ const defaultTaskFields = {
   recurrenceExceptions: [] as string[],
   dependsOnTaskId: null,
   pinned: false,
-  archived: false
+  archived: false,
+  assigneeUserId: null,
+  revision: 0
 } as const
 
 function reminderForDueDate(dueDate: string): string {
@@ -255,7 +257,7 @@ export function createTag(data: DataPayload, name: string): DataPayload {
 
   return {
     ...data,
-    tags: [...data.tags, { id: uuidv4(), name: trimmed }]
+    tags: [...data.tags, { id: uuidv4(), name: trimmed, projectId: null }]
   }
 }
 

@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type {
   BoardGroup,
-  BoardHistoryEntry,
   BoardLink,
   BoardNode,
   BoardNodeStyle,
@@ -11,11 +10,23 @@ import type {
 } from '../../../shared/schema'
 import { addDaysToDateKey, todayKey } from './calendarUtils'
 import { isTaskBlocked } from './taskFilters'
+import {
+  MAX_BOARD_HISTORY,
+  addBoardNode,
+  isOnBoard,
+  undoBoardHistory,
+  withBoardHistory,
+  type BoardKey
+} from './boardScope'
+
+export { MAX_BOARD_HISTORY, addBoardNode, isOnBoard, undoBoardHistory, withBoardHistory }
+export type { BoardKey }
 
 export type BoardSnapshot = {
   id: string
   name: string
   createdAt: string
+  projectId: string | null
   nodes: BoardNode[]
   links: BoardLink[]
 }
@@ -26,37 +37,13 @@ export const BOARD_WIDTH = 6000
 export const BOARD_HEIGHT = 4500
 export const DEFAULT_NODE_WIDTH = 220
 export const DEFAULT_NODE_HEIGHT = 130
-export const MAX_BOARD_HISTORY = 20
 
-function cloneBoardState(data: DataPayload): BoardHistoryEntry {
-  return {
-    id: uuidv4(),
-    timestamp: new Date().toISOString(),
-    nodes: data.boardNodes.map((node) => ({ ...node })),
-    links: data.boardLinks.map((link) => ({ ...link }))
-  }
-}
-
-/** Push current board state to history, then apply the next payload. */
-export function withBoardHistory(before: DataPayload, after: DataPayload): DataPayload {
-  const entry = cloneBoardState(before)
-  const history = [...before.boardHistory, entry].slice(-MAX_BOARD_HISTORY)
-  return { ...after, boardHistory: history }
-}
-
-export function undoBoardHistory(data: DataPayload): DataPayload | null {
-  if (data.boardHistory.length === 0) return null
-  const history = [...data.boardHistory]
-  const previous = history[history.length - 1]
-  return {
-    ...data,
-    boardNodes: previous.nodes.map((node) => ({ ...node })),
-    boardLinks: previous.links.map((link) => ({ ...link })),
-    boardHistory: history.slice(0, -1)
-  }
-}
-
-export function createIdeaNode(x: number, y: number, title = 'Новая идея'): BoardNode {
+export function createIdeaNode(
+  x: number,
+  y: number,
+  title = 'Новая идея',
+  projectId: BoardKey = null
+): BoardNode {
   return {
     id: uuidv4(),
     kind: 'idea',
@@ -70,7 +57,8 @@ export function createIdeaNode(x: number, y: number, title = 'Новая иде�
     color: '#d97706',
     style: 'card',
     groupId: null,
-    imagePath: null
+    imagePath: null,
+    projectId
   }
 }
 
@@ -79,7 +67,8 @@ export function createTaskNode(
   title: string,
   x: number,
   y: number,
-  color = '#3b82f6'
+  color = '#3b82f6',
+  projectId: BoardKey = null
 ): BoardNode {
   return {
     id: uuidv4(),
@@ -94,7 +83,8 @@ export function createTaskNode(
     color,
     style: 'card',
     groupId: null,
-    imagePath: null
+    imagePath: null,
+    projectId
   }
 }
 
@@ -104,7 +94,8 @@ export function createBoardGroup(
   title = 'Группа',
   width = 480,
   height = 320,
-  color = '#78350f'
+  color = '#78350f',
+  projectId: BoardKey = null
 ): BoardGroup {
   return {
     id: uuidv4(),
@@ -113,12 +104,9 @@ export function createBoardGroup(
     y,
     width,
     height,
-    color
+    color,
+    projectId
   }
-}
-
-export function addBoardNode(data: DataPayload, node: BoardNode): DataPayload {
-  return { ...data, boardNodes: [...data.boardNodes, node] }
 }
 
 export function updateBoardNode(
@@ -212,7 +200,14 @@ export function addBoardLink(
   )
   if (exists) return data
 
-  const link: BoardLink = { id: uuidv4(), fromNodeId, toNodeId, label }
+  const fromNode = data.boardNodes.find((node) => node.id === fromNodeId)
+  const link: BoardLink = {
+    id: uuidv4(),
+    fromNodeId,
+    toNodeId,
+    label,
+    projectId: fromNode?.projectId ?? null
+  }
   return { ...data, boardLinks: [...data.boardLinks, link] }
 }
 
@@ -347,13 +342,18 @@ export function getBoardSnapshots(data: DataPayload): BoardSnapshot[] {
   return (data as DataWithSnapshots).boardSnapshots ?? []
 }
 
-export function saveBoardSnapshot(data: DataPayload, name: string): DataPayload {
+export function saveBoardSnapshot(
+  data: DataPayload,
+  name: string,
+  boardKey: BoardKey = null
+): DataPayload {
   const snapshot: BoardSnapshot = {
     id: uuidv4(),
     name,
     createdAt: new Date().toISOString(),
-    nodes: data.boardNodes.map((node) => ({ ...node })),
-    links: data.boardLinks.map((link) => ({ ...link }))
+    projectId: boardKey,
+    nodes: data.boardNodes.filter((node) => isOnBoard(node, boardKey)).map((node) => ({ ...node })),
+    links: data.boardLinks.filter((link) => isOnBoard(link, boardKey)).map((link) => ({ ...link }))
   }
   const snapshots = getBoardSnapshots(data)
   return { ...data, boardSnapshots: [...snapshots, snapshot] } as DataPayload
@@ -362,11 +362,22 @@ export function saveBoardSnapshot(data: DataPayload, name: string): DataPayload 
 export function restoreBoardSnapshot(data: DataPayload, snapshotId: string): DataPayload {
   const snapshot = getBoardSnapshots(data).find((item) => item.id === snapshotId)
   if (!snapshot) return data
+  const boardKey = snapshot.projectId ?? null
   return {
     ...data,
-    boardNodes: snapshot.nodes.map((node) => ({ ...node })),
-    boardLinks: snapshot.links.map((link) => ({ ...link }))
+    boardNodes: [
+      ...data.boardNodes.filter((node) => !isOnBoard(node, boardKey)),
+      ...snapshot.nodes.map((node) => ({ ...node }))
+    ],
+    boardLinks: [
+      ...data.boardLinks.filter((link) => !isOnBoard(link, boardKey)),
+      ...snapshot.links.map((link) => ({ ...link }))
+    ]
   }
+}
+
+export function snapshotsForBoard(data: DataPayload, boardKey: BoardKey): BoardSnapshot[] {
+  return getBoardSnapshots(data).filter((snapshot) => isOnBoard(snapshot, boardKey))
 }
 
 export function alignBoardNodes(

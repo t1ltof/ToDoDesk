@@ -2,7 +2,7 @@
 
 Десктопный планировщик рабочих задач для личного использования (Windows, portable).
 
-**Актуальная версия:** [1.0.0](https://github.com/t1ltof/ToDoDesk/releases/latest) · формат данных **1.4**
+**Актуальная версия:** [1.0.0](https://github.com/t1ltof/ToDoDesk/releases/latest) · формат данных **2.0**
 
 ## Скачать
 
