@@ -11,6 +11,7 @@ import {
 } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { app } from 'electron'
 import {
   createEmptyData,
   dataFileSchema,
@@ -28,7 +29,9 @@ import { markSyncWrite } from './syncWatcher'
 import type { BoardLink, BoardNode } from '../shared/schema'
 import { mergeById } from '../shared/mergeById'
 
-const APP_VERSION = '1.0.0'
+function getAppVersion(): string {
+  return app.getVersion()
+}
 
 export class DataLoadError extends Error {
   readonly needsPassword: boolean
@@ -97,7 +100,7 @@ function buildDataFile(data: DataPayload): DataFile {
     format: 'tododesk-backup',
     version: FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    appVersion: APP_VERSION,
+    appVersion: getAppVersion(),
     data
   }
 }
@@ -206,7 +209,7 @@ export function saveData(data: DataPayload): void {
 export function buildExportReport(data: DataPayload): ExportReport {
   return {
     exportedAt: new Date().toISOString(),
-    appVersion: APP_VERSION,
+    appVersion: getAppVersion(),
     formatVersion: FORMAT_VERSION,
     projectCount: data.projects.length,
     taskCount: data.tasks.length,
