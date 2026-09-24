@@ -139,6 +139,7 @@ export function updateTask(
       | 'dependsOnTaskId'
       | 'pinned'
       | 'archived'
+      | 'assigneeUserId'
     >
   >
 ): DataPayload {

@@ -100,6 +100,14 @@ export default function CommandPaletteDialog({
         action: () => onSelectView('inbox')
       },
       {
+        id: 'view-assigned',
+        label: 'На мне',
+        keywords: 'на мне assigned исполнитель',
+        category: 'view',
+        icon: Inbox,
+        action: () => onSelectView('assigned')
+      },
+      {
         id: 'view-board',
         label: 'Личная доска',
         keywords: 'доска board личная',

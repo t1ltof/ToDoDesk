@@ -158,6 +158,11 @@ export function filterTasksForView(
     return tasks
   } else if (view === 'inbox') {
     tasks = tasks.filter((task) => task.projectId === null && task.status === 'todo')
+  } else if (view === 'assigned') {
+    const userId = data.settings.cloudUserId
+    tasks = tasks.filter(
+      (task) => task.status === 'todo' && userId !== null && task.assigneeUserId === userId
+    )
   } else if (view === 'all') {
     tasks = tasks.filter((task) => task.status === 'todo')
   } else if (view === 'completed') {

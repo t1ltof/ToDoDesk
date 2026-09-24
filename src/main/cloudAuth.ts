@@ -11,6 +11,7 @@ export interface CloudSession {
   login: string
   displayName: string
   revision: number
+  projectRevisions?: Record<string, number>
 }
 
 function sessionPath(): string {

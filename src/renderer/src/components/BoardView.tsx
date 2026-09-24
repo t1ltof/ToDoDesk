@@ -63,6 +63,7 @@ import {
 } from '../utils/boardBackground'
 import { getChildTasks } from '../store/useAppStore'
 import { attachmentSrcUrl } from '../utils/attachmentHelpers'
+import { canEditProject } from '../utils/cloudAccess'
 import { createRootTask } from '../utils/taskHelpers'
 import BoardAddTaskDialog from './BoardAddTaskDialog'
 import BoardInputDialog from './BoardInputDialog'
@@ -622,6 +623,7 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
   const persistBoard = useCallback(
     async (next: ReturnType<typeof useAppStore.getState>['data']): Promise<void> => {
       const current = useAppStore.getState().data
+      if (!canEditProject(current, boardKey)) return
       await persist(withBoardHistory(current, next, boardKey))
     },
     [persist, boardKey]

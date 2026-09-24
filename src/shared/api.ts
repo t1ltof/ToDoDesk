@@ -1,6 +1,18 @@
-import type { CloudLoginResult, CloudSessionInfo, CloudSyncResult } from './cloud'
+import type {
+  CloudInviteResult,
+  CloudLoginResult,
+  CloudSessionInfo,
+  CloudSyncResult,
+  MemberRole
+} from './cloud'
 
-export type { CloudLoginResult, CloudSessionInfo, CloudSyncResult } from './cloud'
+export type {
+  CloudInviteResult,
+  CloudLoginResult,
+  CloudSessionInfo,
+  CloudSyncResult,
+  MemberRole
+} from './cloud'
 import type { ImportPreview } from './import'
 import type { DataPayload } from './schema'
 import type { SyncConflictChoice, SyncConflictPayload } from './sync'
@@ -103,6 +115,9 @@ export interface ToDoDeskApi {
   cloudLogout: () => Promise<void>
   cloudStatus: () => Promise<CloudSessionInfo>
   cloudPullNow: () => Promise<CloudSyncResult>
+  cloudInvite: (projectId: string, role: MemberRole) => Promise<CloudInviteResult>
+  cloudAcceptInvite: (token: string) => Promise<CloudSyncResult>
+  cloudRemoveMember: (projectId: string, userId: string) => Promise<{ ok: boolean; error?: string }>
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void
   onDataLoadFailed: (callback: (payload: DataLoadFailedPayload) => void) => () => void
   onQuickAdd: (callback: () => void) => () => void

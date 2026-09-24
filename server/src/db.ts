@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
@@ -15,8 +15,12 @@ export function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
 
 export async function migrate(): Promise<void> {
   const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations')
-  const sql = readFileSync(join(dir, '001_init.sql'), 'utf8')
-  await pool.query(sql)
+  const files = readdirSync(dir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+  for (const file of files) {
+    await pool.query(readFileSync(join(dir, file), 'utf8'))
+  }
 }
 
 export async function closeDb(): Promise<void> {

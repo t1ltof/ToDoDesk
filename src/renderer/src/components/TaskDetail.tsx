@@ -18,6 +18,8 @@ import {
 } from '../utils/taskHelpers'
 import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { getChildTasks, getTaskTags, sortProjects, useAppStore } from '../store/useAppStore'
+import { canEditProject, membershipFor } from '../utils/cloudAccess'
+import { addComment } from '../utils/commentHelpers'
 import {
   getTaskDraft,
   removeTaskDraft,
@@ -45,6 +47,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   const [reminderHours, setReminderHours] = useState('2')
   const [showTemplateDialog, setShowTemplateDialog] = useState(false)
   const [templateName, setTemplateName] = useState('')
+  const [commentBody, setCommentBody] = useState('')
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const task = data.tasks.find((item) => item.id === selectedTaskId)
@@ -113,6 +116,11 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   }, [task, title, description, persist])
 
   if (!task) return null
+  const readOnly = !canEditProject(data, task.projectId)
+  const members = membershipFor(data, task.projectId)?.members ?? []
+  const comments = data.comments
+    .filter((comment) => comment.taskId === task.id)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
   const save = async (next: typeof data): Promise<void> => {
     await persist(next, { clearUnsaved: true })
@@ -131,6 +139,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       priority: Priority
       projectId: string | null
       recurrence: Recurrence
+      assigneeUserId: string | null
     }>
   ): Promise<void> => {
     const current = useAppStore.getState().data
@@ -214,7 +223,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
       )}
     >
       <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-        <h3 className="font-medium">Детали задачи</h3>
+        <h3 className="font-medium">{readOnly ? 'Детали задачи · просмотр' : 'Детали задачи'}</h3>
         <div className="flex gap-1">
           <button
             type="button"
@@ -265,6 +274,7 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             onBlur={() => {
               if (title.trim() && title !== task.title) void handleField({ title: title.trim() })
             }}
+            disabled={readOnly}
             className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
           />
         </div>
@@ -569,6 +579,27 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
           </select>
         </div>
 
+        {members.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">Исполнитель</label>
+            <select
+              value={task.assigneeUserId ?? ''}
+              disabled={readOnly}
+              onChange={(event) =>
+                void handleField({ assigneeUserId: event.target.value || null })
+              }
+              className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+              <option value="">Не назначен</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div>
           <label className="mb-2 block text-xs text-gray-500">Теги</label>
           <div className="flex flex-wrap gap-2">
@@ -758,6 +789,61 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
             Сохранить как шаблон
           </button>
         )}
+
+        <div>
+          <label className="mb-2 block text-xs text-gray-500">Комментарии</label>
+          <div className="space-y-2">
+            {comments.length === 0 ? (
+              <p className="text-xs text-gray-500">Пока нет комментариев</p>
+            ) : (
+              comments.map((comment) => {
+                const author =
+                  members.find((member) => member.userId === comment.authorUserId)?.displayName ??
+                  'Участник'
+                return (
+                  <div
+                    key={comment.id}
+                    className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                  >
+                    <p className="text-xs text-gray-500">
+                      {author} · {new Date(comment.createdAt).toLocaleString('ru-RU')}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">{comment.body}</p>
+                  </div>
+                )
+              })
+            )}
+          </div>
+          {!readOnly && (
+            <div className="mt-2 flex gap-2">
+              <input
+                value={commentBody}
+                onChange={(event) => setCommentBody(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && commentBody.trim()) {
+                    const current = useAppStore.getState().data
+                    void save(addComment(current, task.id, commentBody, data.settings.cloudUserId))
+                    setCommentBody('')
+                  }
+                }}
+                placeholder="Комментарий…"
+                className="flex-1 rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!commentBody.trim()) return
+                  const current = useAppStore.getState().data
+                  void save(addComment(current, task.id, commentBody, data.settings.cloudUserId))
+                  setCommentBody('')
+                }}
+                className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+              >
+                Ок
+              </button>
+            </div>
+          )}
+        </div>
 
         <div>
           <label className="mb-2 block text-xs text-gray-500">Подзадачи</label>

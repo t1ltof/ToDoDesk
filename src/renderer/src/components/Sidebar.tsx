@@ -18,6 +18,7 @@ import {
   Target,
   Timer,
   Upload,
+  User,
   Zap
 } from 'lucide-react'
 import { useState } from 'react'
@@ -33,6 +34,7 @@ import clsx from 'clsx'
 const mainViews: Array<{ id: ViewId; label: string; icon: typeof Inbox }> = [
   { id: 'today', label: 'Сегодня', icon: CalendarDays },
   { id: 'inbox', label: 'Входящие', icon: Inbox },
+  { id: 'assigned', label: 'На мне', icon: User },
   { id: 'all', label: 'Все задачи', icon: ListTodo },
   { id: 'completed', label: 'Выполненные', icon: CheckCircle2 },
   { id: 'calendar', label: 'Календарь', icon: CalendarDays },
