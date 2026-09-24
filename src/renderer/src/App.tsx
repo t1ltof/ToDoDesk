@@ -181,7 +181,7 @@ export default function App(): JSX.Element {
       {updateInfo?.hasUpdate && (
         <UpdateBanner info={updateInfo} onDismiss={() => setUpdateInfo(null)} />
       )}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {renderMain()}

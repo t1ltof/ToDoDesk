@@ -16,6 +16,7 @@ import {
   toggleTaskTag,
   updateTask
 } from '../utils/taskHelpers'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { getChildTasks, getTaskTags, sortProjects, useAppStore } from '../store/useAppStore'
 import {
   getTaskDraft,
@@ -30,6 +31,7 @@ interface TaskDetailProps {
 
 export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.Element | null {
   const { data, selectedTaskId, setSelectedTaskId, persist } = useAppStore()
+  const { detailNarrow } = useDesktopLayout()
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [checklistText, setChecklistText] = useState('')
   const [newTagName, setNewTagName] = useState('')
@@ -205,7 +207,12 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   }
 
   return (
-    <aside className="flex h-full w-96 flex-col border-l border-surface-border bg-surface-elevated">
+    <aside
+      className={clsx(
+        'flex h-full min-w-0 shrink-0 flex-col overflow-hidden border-l border-surface-border bg-surface-elevated',
+        detailNarrow ? 'w-80' : 'w-96'
+      )}
+    >
       <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
         <h3 className="font-medium">Детали задачи</h3>
         <div className="flex gap-1">

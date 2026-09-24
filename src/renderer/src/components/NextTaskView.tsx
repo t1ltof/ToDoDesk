@@ -43,7 +43,7 @@ export default function NextTaskView(): JSX.Element {
   }
 
   return (
-    <section className="flex h-full flex-1 flex-col items-center justify-center p-8">
+    <section className="flex h-full min-w-0 flex-1 flex-col items-center justify-center overflow-hidden p-8">
       <div className="w-full max-w-2xl">
         <h2 className="mb-2 text-center text-xl font-semibold">Следующая задача</h2>
         <p className="mb-8 text-center text-sm text-gray-400">

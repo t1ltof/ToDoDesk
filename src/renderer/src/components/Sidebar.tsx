@@ -23,6 +23,7 @@ import {
 import { useState } from 'react'
 import type { ImportPreview } from '../../../shared/import'
 import type { Project, ViewId } from '../../../shared/schema'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { countCompletedTasks, sortProjects, useAppStore } from '../store/useAppStore'
 import ImportDialog from './ImportDialog'
 import ProjectDialog from './ProjectDialog'
@@ -53,7 +54,7 @@ export default function Sidebar({ onOpenSettings }: SidebarProps): JSX.Element {
   const { data, activeView, setActiveView, setSelectedTaskId } = useAppStore()
   const projects = sortProjects(data.projects)
   const completedCount = countCompletedTasks(data)
-  const compact = data.settings.sidebarCompact
+  const { sidebarCompact: compact } = useDesktopLayout()
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [editingTagId, setEditingTagId] = useState<string | null>(null)

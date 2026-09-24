@@ -2,6 +2,7 @@ import { Columns3, List, Search } from 'lucide-react'
 import { useState } from 'react'
 import type { ViewId } from '../../../shared/schema'
 import { filterTasksForView, useAppStore } from '../store/useAppStore'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { completeTask, reopenTask } from '../utils/recurrence'
 import clsx from 'clsx'
 
@@ -12,6 +13,7 @@ interface KanbanViewProps {
 export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
   const { data, persist, setSelectedTaskId, searchQuery, setSearchQuery, setActiveView } =
     useAppStore()
+  const { chromeNarrow } = useDesktopLayout()
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<'todo' | 'done' | null>(null)
   const projectId = view.replace('kanban:', '')
@@ -59,7 +61,7 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
   }) => (
     <div
       className={clsx(
-        'flex min-h-0 flex-1 flex-col rounded-xl border bg-surface-elevated transition',
+        'flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border bg-surface-elevated transition',
         dropTarget === columnId ? 'border-accent' : 'border-surface-border'
       )}
       onDragOver={(e) => {
@@ -108,13 +110,15 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
   )
 
   return (
-    <section className="flex h-full flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-surface-border px-6 py-4">
-        <div>
-          <h2 className="text-xl font-semibold">{project?.name ?? 'Проект'}</h2>
-          <p className="text-sm text-gray-400">Kanban — перетащите карточку между колонками</p>
+    <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-semibold">{project?.name ?? 'Проект'}</h2>
+          <p className="text-sm text-gray-400">
+            {chromeNarrow ? 'Kanban' : 'Kanban — перетащите карточку между колонками'}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-surface-border">
             <button
               type="button"
@@ -138,12 +142,12 @@ export default function KanbanView({ view }: KanbanViewProps): JSX.Element {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Поиск..."
-              className="rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
+              className="w-40 max-w-full rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
             />
           </div>
         </div>
       </header>
-      <div className="flex flex-1 gap-4 overflow-hidden p-4">
+      <div className="flex min-h-0 min-w-0 flex-1 gap-4 overflow-hidden p-4">
         <Column title={`К выполнению (${todoTasks.length})`} tasks={todoTasks} done={false} columnId="todo" />
         <Column title={`Выполнено (${doneTasks.length})`} tasks={doneTasks} done={true} columnId="done" />
       </div>

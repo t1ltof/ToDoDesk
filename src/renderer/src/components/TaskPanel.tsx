@@ -24,6 +24,7 @@ import {
 } from '../utils/bulkActions'
 import { clearCompletedTasks, createRootTask, reorderTasks, toggleTaskTag } from '../utils/taskHelpers'
 import { filterTasksForView, sortProjects, useAppStore } from '../store/useAppStore'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { todayKey } from '../utils/calendarUtils'
 import ProjectDialog from './ProjectDialog'
 import TaskItem from './TaskItem'
@@ -74,6 +75,7 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
     toggleBulkSelectedTaskId,
     clearBulkSelection
   } = useAppStore()
+  const { chromeNarrow } = useDesktopLayout()
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showProjectDialog, setShowProjectDialog] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -242,12 +244,12 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-surface-border px-6 py-4">
-        <div>
-          <h2 className="text-xl font-semibold">{getViewTitle(activeView, data)}</h2>
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-semibold">{getViewTitle(activeView, data)}</h2>
           <p className="text-sm text-gray-400">{tasks.length} задач</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {isProject && (
             <div className="flex rounded-lg border border-surface-border">
               <button
@@ -272,7 +274,7 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Поиск..."
-              className="rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
+              className="w-40 max-w-full rounded-lg border border-surface-border bg-surface-elevated py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
             />
           </div>
           {!isCompletedView && (
@@ -280,9 +282,10 @@ export default function TaskPanel({ onPasteTasks }: TaskPanelProps = {}): JSX.El
               type="button"
               onClick={() => onPasteTasks?.()}
               className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-3 py-2 text-sm text-gray-300"
-              title="Ctrl+Shift+V"
+              title="Вставить список (Ctrl+Shift+V)"
             >
-              <ClipboardPaste size={16} /> Вставить список
+              <ClipboardPaste size={16} />
+              {chromeNarrow ? null : ' Вставить список'}
             </button>
           )}
           {!isCompletedView && (
