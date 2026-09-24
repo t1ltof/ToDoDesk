@@ -59,7 +59,8 @@ export function validateImportFile(sourcePath: string): ImportPreview {
     'boardSnapshots',
     'smartRules',
     'drafts',
-    'boardHistory'
+    'boardHistory',
+    'comments'
   ]) {
     if (!(key in data)) base.warnings.push(`Отсутствует поле "${key}" — будет создано пустым`)
     else if (!Array.isArray(data[key])) base.errors.push(`Поле "${key}" должно быть массивом`)
@@ -97,7 +98,10 @@ export function validateImportFile(sourcePath: string): ImportPreview {
     base.templateCount = parsed.data.templates.length
     base.valid = base.errors.length === 0
 
-    if (file.version && !['1.0', '1.1', '1.2', '1.3', '1.4'].includes(String(file.version))) {
+    if (
+      file.version &&
+      !['1.0', '1.1', '1.2', '1.3', '1.4', '2.0'].includes(String(file.version))
+    ) {
       base.warnings.push(`Версия формата ${file.version} — данные будут мигрированы`)
     }
   } catch (error) {

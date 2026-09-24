@@ -108,7 +108,8 @@ export function logActivity(
     action,
     entityType,
     entityId,
-    summary
+    summary,
+    actorUserId: null
   }
   return { ...data, activityLogs: [...data.activityLogs, entry].slice(-500) }
 }

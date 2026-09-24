@@ -47,4 +47,48 @@ describe('migratePayload', () => {
     assert.equal(migrated.settings.scheduledExportEnabled, false)
     assert.equal(migrated.settings.scheduledExportFormat, 'tododesk')
   })
+
+  it('upgrades 1.4 board and tasks to format 2.0 fields', () => {
+    const nodeId = randomUUID()
+    const taskId = randomUUID()
+    const migrated = migratePayload({
+      projects: [],
+      tags: [{ id: randomUUID(), name: 'work' }],
+      tasks: [
+        {
+          id: taskId,
+          projectId: null,
+          parentId: null,
+          title: 'Legacy',
+          status: 'todo',
+          priority: 'normal',
+          dueDate: null,
+          completedAt: null,
+          sortOrder: 0,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        }
+      ],
+      taskTags: [],
+      checklistItems: [],
+      reminders: [],
+      boardNodes: [
+        {
+          id: nodeId,
+          kind: 'idea',
+          title: 'Idea',
+          x: 10,
+          y: 20
+        }
+      ],
+      settings: {}
+    })
+
+    assert.equal(migrated.tasks[0].assigneeUserId, null)
+    assert.equal(migrated.tasks[0].revision, 0)
+    assert.equal(migrated.tags[0].projectId, null)
+    assert.equal(migrated.boardNodes[0].projectId, null)
+    assert.deepEqual(migrated.comments, [])
+    assert.equal(migrated.settings.profileMode, 'local')
+  })
 })

@@ -12,7 +12,8 @@ export function createSprint(
     endDate: input.endDate,
     goal: input.goal?.trim() ?? '',
     taskIds: [],
-    completed: false
+    completed: false,
+    projectId: null
   }
 
   return { ...data, sprints: [...data.sprints, sprint] }

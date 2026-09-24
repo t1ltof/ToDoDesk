@@ -16,7 +16,8 @@ export function appendActivityLog(
     action,
     entityType,
     entityId: entityId ?? null,
-    summary
+    summary,
+    actorUserId: null
   }
 
   const activityLogs = [entry, ...data.activityLogs].slice(0, MAX_ACTIVITY_LOGS)

@@ -13,7 +13,7 @@
     "dist": "node scripts/dist.mjs",
     "dist:full": "npm run build && electron-builder --win portable",
     "dist:bootstrap": "node scripts/package-bootstrap.mjs",
-    "test": "node --experimental-strip-types --test tests/migrate.test.ts tests/encryption.test.ts tests/recurrence.test.ts tests/taskHelpers.test.ts tests/merge.test.ts tests/calendarFilters.test.ts tests/desktopLayout.test.ts tests/e2e-smoke.test.mjs",
+    "test": "node --experimental-strip-types --test tests/migrate.test.ts tests/encryption.test.ts tests/recurrence.test.ts tests/taskHelpers.test.ts tests/merge.test.ts tests/calendarFilters.test.ts tests/desktopLayout.test.ts tests/boardHelpers.test.ts tests/e2e-smoke.test.mjs",
     "test:e2e": "node --test tests/e2e-smoke.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.web.json"
   },

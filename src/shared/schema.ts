@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const FORMAT_VERSION = '1.4'
+export const FORMAT_VERSION = '2.0'
 
 export const prioritySchema = z.enum(['normal', 'important'])
 export const statusSchema = z.enum(['todo', 'done'])
@@ -28,7 +28,8 @@ export const projectSchema = z.object({
 
 export const tagSchema = z.object({
   id: z.string().uuid(),
-  name: z.string().min(1)
+  name: z.string().min(1),
+  projectId: z.string().uuid().nullable().default(null)
 })
 
 export const taskSchema = z.object({
@@ -49,6 +50,8 @@ export const taskSchema = z.object({
   dependsOnTaskId: z.string().uuid().nullable().default(null),
   pinned: z.boolean().default(false),
   archived: z.boolean().default(false),
+  assigneeUserId: z.string().uuid().nullable().default(null),
+  revision: z.number().int().nonnegative().default(0),
   sortOrder: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string()
@@ -117,7 +120,16 @@ export const activityLogSchema = z.object({
   action: z.string(),
   entityType: z.string(),
   entityId: z.string().nullable().default(null),
-  summary: z.string()
+  summary: z.string(),
+  actorUserId: z.string().uuid().nullable().default(null)
+})
+
+export const commentSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  authorUserId: z.string().uuid().nullable().default(null),
+  body: z.string().min(1),
+  createdAt: z.string()
 })
 
 export const boardNodeKindSchema = z.enum(['task', 'idea'])
@@ -135,14 +147,16 @@ export const boardNodeSchema = z.object({
   color: z.string().default('#d97706'),
   style: boardNodeStyleSchema.default('card'),
   groupId: z.string().uuid().nullable().default(null),
-  imagePath: z.string().nullable().default(null)
+  imagePath: z.string().nullable().default(null),
+  projectId: z.string().uuid().nullable().default(null)
 })
 
 export const boardLinkSchema = z.object({
   id: z.string().uuid(),
   fromNodeId: z.string().uuid(),
   toNodeId: z.string().uuid(),
-  label: z.string().default('')
+  label: z.string().default(''),
+  projectId: z.string().uuid().nullable().default(null)
 })
 
 export const boardGroupSchema = z.object({
@@ -152,7 +166,8 @@ export const boardGroupSchema = z.object({
   y: z.number(),
   width: z.number().positive(),
   height: z.number().positive(),
-  color: z.string().default('#78350f')
+  color: z.string().default('#78350f'),
+  projectId: z.string().uuid().nullable().default(null)
 })
 
 export const weeklyGoalSchema = z.object({
@@ -177,13 +192,15 @@ export const sprintSchema = z.object({
   endDate: z.string(),
   goal: z.string().default(''),
   taskIds: z.array(z.string().uuid()).default([]),
-  completed: z.boolean().default(false)
+  completed: z.boolean().default(false),
+  projectId: z.string().uuid().nullable().default(null)
 })
 
 export const boardSnapshotSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   createdAt: z.string(),
+  projectId: z.string().uuid().nullable().default(null),
   nodes: z.array(boardNodeSchema),
   links: z.array(boardLinkSchema)
 })
@@ -211,6 +228,7 @@ export const scheduledExportFormatSchema = z.enum(['tododesk', 'csv', 'both'])
 export const boardHistoryEntrySchema = z.object({
   id: z.string().uuid(),
   timestamp: z.string(),
+  projectId: z.string().uuid().nullable().default(null),
   nodes: z.array(boardNodeSchema),
   links: z.array(boardLinkSchema)
 })
@@ -252,7 +270,10 @@ export const settingsSchema = z.object({
   dailyDigestEnabled: z.boolean().default(false),
   dailyDigestHour: z.number().int().min(0).max(23).default(8),
   recentTaskIds: z.array(z.string().uuid()).default([]),
-  todayOnlyMaxTasks: z.number().int().min(0).max(50).default(0)
+  todayOnlyMaxTasks: z.number().int().min(0).max(50).default(0),
+  profileMode: z.enum(['local', 'cloud']).default('local'),
+  cloudUserId: z.string().nullable().default(null),
+  cloudServerUrl: z.string().nullable().default(null)
 })
 
 export const dataPayloadSchema = z.object({
@@ -276,6 +297,7 @@ export const dataPayloadSchema = z.object({
   smartRules: z.array(smartRuleSchema).default([]),
   drafts: z.array(draftSchema).default([]),
   boardHistory: z.array(boardHistoryEntrySchema).default([]),
+  comments: z.array(commentSchema).default([]),
   settings: settingsSchema
 })
 
@@ -304,6 +326,7 @@ export type Template = z.infer<typeof templateSchema>
 export type ProjectTemplate = z.infer<typeof projectTemplateSchema>
 export type Note = z.infer<typeof noteSchema>
 export type ActivityLog = z.infer<typeof activityLogSchema>
+export type Comment = z.infer<typeof commentSchema>
 export type BoardNodeKind = z.infer<typeof boardNodeKindSchema>
 export type BoardNode = z.infer<typeof boardNodeSchema>
 export type BoardLink = z.infer<typeof boardLinkSchema>
@@ -328,6 +351,7 @@ export type ViewId =
   | 'calendar'
   | 'stats'
   | 'board'
+  | `board:${string}`
   | 'notes'
   | 'focus'
   | 'timeline'
@@ -366,6 +390,7 @@ export function createEmptyData(): DataPayload {
     smartRules: [],
     drafts: [],
     boardHistory: [],
+    comments: [],
     settings: { ...defaultSettings }
   }
 }
@@ -381,7 +406,9 @@ function migrateTask(task: Partial<Task>): Task {
     recurrenceExceptions: task.recurrenceExceptions ?? [],
     dependsOnTaskId: task.dependsOnTaskId ?? null,
     pinned: task.pinned ?? false,
-    archived: task.archived ?? false
+    archived: task.archived ?? false,
+    assigneeUserId: task.assigneeUserId ?? null,
+    revision: task.revision ?? 0
   } as Task
 }
 
@@ -396,8 +423,21 @@ function migrateBoardNode(node: Partial<BoardNode>): BoardNode {
     groupId: node.groupId ?? null,
     notes: node.notes ?? '',
     taskId: node.taskId ?? null,
-    imagePath: node.imagePath ?? null
+    imagePath: node.imagePath ?? null,
+    projectId: node.projectId ?? null
   } as BoardNode
+}
+
+function migrateTag(tag: Partial<Tag>): Tag {
+  return { ...tag, projectId: tag.projectId ?? null } as Tag
+}
+
+function migrateSprint(sprint: Partial<Sprint>): Sprint {
+  return { ...sprint, projectId: sprint.projectId ?? null } as Sprint
+}
+
+function migrateActivityLog(log: Partial<ActivityLog>): ActivityLog {
+  return { ...log, actorUserId: log.actorUserId ?? null } as ActivityLog
 }
 
 export function migratePayload(raw: unknown): DataPayload {
@@ -412,26 +452,83 @@ export function migratePayload(raw: unknown): DataPayload {
   const boardNodes = Array.isArray(data.boardNodes)
     ? data.boardNodes.map((n) => migrateBoardNode(n as Partial<BoardNode>))
     : []
+  const tags = Array.isArray(data.tags) ? data.tags.map((t) => migrateTag(t as Partial<Tag>)) : []
+  const sprints = Array.isArray(data.sprints)
+    ? data.sprints.map((s) => migrateSprint(s as Partial<Sprint>))
+    : []
+  const activityLogs = Array.isArray(data.activityLogs)
+    ? data.activityLogs.map((l) => migrateActivityLog(l as Partial<ActivityLog>))
+    : []
+  const boardLinks = Array.isArray(data.boardLinks)
+    ? data.boardLinks.map((link) => ({
+        ...(link as object),
+        projectId: (link as { projectId?: string | null }).projectId ?? null
+      }))
+    : []
+  const boardGroups = Array.isArray(data.boardGroups)
+    ? data.boardGroups.map((group) => ({
+        ...(group as object),
+        projectId: (group as { projectId?: string | null }).projectId ?? null
+      }))
+    : []
+  const boardSnapshots = Array.isArray(data.boardSnapshots)
+    ? data.boardSnapshots.map((snapshot) => {
+        const item = snapshot as { nodes?: unknown[]; links?: unknown[]; projectId?: string | null }
+        return {
+          ...(snapshot as object),
+          projectId: item.projectId ?? null,
+          nodes: Array.isArray(item.nodes)
+            ? item.nodes.map((n) => migrateBoardNode(n as Partial<BoardNode>))
+            : [],
+          links: Array.isArray(item.links)
+            ? item.links.map((link) => ({
+                ...(link as object),
+                projectId: (link as { projectId?: string | null }).projectId ?? null
+              }))
+            : []
+        }
+      })
+    : []
+  const boardHistory = Array.isArray(data.boardHistory)
+    ? data.boardHistory.map((entry) => {
+        const item = entry as { nodes?: unknown[]; links?: unknown[]; projectId?: string | null }
+        return {
+          ...(entry as object),
+          projectId: item.projectId ?? null,
+          nodes: Array.isArray(item.nodes)
+            ? item.nodes.map((n) => migrateBoardNode(n as Partial<BoardNode>))
+            : [],
+          links: Array.isArray(item.links)
+            ? item.links.map((link) => ({
+                ...(link as object),
+                projectId: (link as { projectId?: string | null }).projectId ?? null
+              }))
+            : []
+        }
+      })
+    : []
 
   return dataPayloadSchema.parse({
     ...base,
     ...data,
     projects,
+    tags,
     tasks,
     templates: data.templates ?? [],
     projectTemplates: data.projectTemplates ?? [],
     notes: data.notes ?? [],
-    activityLogs: data.activityLogs ?? [],
+    activityLogs,
     weeklyGoals: data.weeklyGoals ?? [],
     boardNodes,
-    boardLinks: data.boardLinks ?? [],
-    boardGroups: data.boardGroups ?? [],
+    boardLinks,
+    boardGroups,
     taskAttachments: data.taskAttachments ?? [],
-    sprints: data.sprints ?? [],
-    boardSnapshots: data.boardSnapshots ?? [],
+    sprints,
+    boardSnapshots,
     smartRules: data.smartRules ?? [],
     drafts: data.drafts ?? [],
-    boardHistory: data.boardHistory ?? [],
+    boardHistory,
+    comments: data.comments ?? [],
     settings: { ...defaultSettings, ...(data.settings as object) }
   })
 }

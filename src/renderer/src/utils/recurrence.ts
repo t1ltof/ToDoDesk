@@ -64,26 +64,16 @@ export function completeTask(data: DataPayload, taskId: string): DataPayload {
   if (task.status === 'todo' && task.recurrence !== 'none' && task.dueDate) {
     const newDue = nextDueDate(task.dueDate, task.recurrence, task.recurrenceExceptions)
     const newTask: Task = {
+      ...task,
       id: uuidv4(),
-      projectId: task.projectId,
-      parentId: task.parentId,
-      title: task.title,
-      description: task.description,
       status: 'todo',
-      priority: task.priority,
       dueDate: newDue,
-      dueDateEnd: task.dueDateEnd,
-      dueTime: task.dueTime,
-      timeOfDay: task.timeOfDay,
       completedAt: null,
-      recurrence: task.recurrence,
-      recurrenceExceptions: task.recurrenceExceptions,
-      dependsOnTaskId: task.dependsOnTaskId,
-      pinned: task.pinned,
       archived: false,
       sortOrder: data.tasks.length,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      revision: 0
     }
 
     const taskTags = data.taskTags.filter((link) => link.taskId === taskId)

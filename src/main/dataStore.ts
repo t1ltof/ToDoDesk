@@ -296,6 +296,7 @@ function collectExistingIds(data: DataPayload): Set<string> {
   for (const s of data.boardSnapshots) ids.add(s.id)
   for (const r of data.smartRules) ids.add(r.id)
   for (const h of data.boardHistory) ids.add(h.id)
+  for (const c of data.comments) ids.add(c.id)
   return ids
 }
 
@@ -307,7 +308,8 @@ function remapBoardNodes(
     ...node,
     id: mapId(node.id)!,
     taskId: mapId(node.taskId),
-    groupId: mapId(node.groupId)
+    groupId: mapId(node.groupId),
+    projectId: mapId(node.projectId)
   }))
 }
 
@@ -319,7 +321,8 @@ function remapBoardLinks(
     ...link,
     id: mapId(link.id)!,
     fromNodeId: mapId(link.fromNodeId)!,
-    toNodeId: mapId(link.toNodeId)!
+    toNodeId: mapId(link.toNodeId)!,
+    projectId: mapId(link.projectId)
   }))
 }
 
@@ -355,6 +358,7 @@ function remapImportedPayload(
   for (const item of imported.boardSnapshots) ensureId(item.id, idMap, existing)
   for (const item of imported.smartRules) ensureId(item.id, idMap, existing)
   for (const item of imported.boardHistory) ensureId(item.id, idMap, existing)
+  for (const item of imported.comments) ensureId(item.id, idMap, existing)
 
   const mapId = (id: string | null): string | null => {
     if (!id) return null
@@ -367,7 +371,11 @@ function remapImportedPayload(
       id: mapId(p.id)!,
       sortOrder: p.sortOrder
     })),
-    tags: imported.tags.map((t) => ({ ...t, id: mapId(t.id)! })),
+    tags: imported.tags.map((t) => ({
+      ...t,
+      id: mapId(t.id)!,
+      projectId: mapId(t.projectId)
+    })),
     tasks: imported.tasks.map((t) => ({
       ...t,
       id: mapId(t.id)!,
@@ -416,17 +424,20 @@ function remapImportedPayload(
       ...n,
       id: mapId(n.id)!,
       taskId: mapId(n.taskId),
-      groupId: mapId(n.groupId)
+      groupId: mapId(n.groupId),
+      projectId: mapId(n.projectId)
     })),
     boardLinks: imported.boardLinks.map((l) => ({
       ...l,
       id: mapId(l.id)!,
       fromNodeId: mapId(l.fromNodeId)!,
-      toNodeId: mapId(l.toNodeId)!
+      toNodeId: mapId(l.toNodeId)!,
+      projectId: mapId(l.projectId)
     })),
     boardGroups: imported.boardGroups.map((g) => ({
       ...g,
-      id: mapId(g.id)!
+      id: mapId(g.id)!,
+      projectId: mapId(g.projectId)
     })),
     taskAttachments: imported.taskAttachments.map((attachment) => ({
       ...attachment,
@@ -436,11 +447,13 @@ function remapImportedPayload(
     sprints: imported.sprints.map((sprint) => ({
       ...sprint,
       id: mapId(sprint.id)!,
-      taskIds: sprint.taskIds.map((id) => mapId(id) ?? id)
+      taskIds: sprint.taskIds.map((id) => mapId(id) ?? id),
+      projectId: mapId(sprint.projectId)
     })),
     boardSnapshots: imported.boardSnapshots.map((snapshot) => ({
       ...snapshot,
       id: mapId(snapshot.id)!,
+      projectId: mapId(snapshot.projectId),
       nodes: remapBoardNodes(snapshot.nodes, mapId),
       links: remapBoardLinks(snapshot.links, mapId)
     })),
@@ -456,8 +469,14 @@ function remapImportedPayload(
     boardHistory: imported.boardHistory.map((entry) => ({
       ...entry,
       id: mapId(entry.id)!,
+      projectId: mapId(entry.projectId),
       nodes: remapBoardNodes(entry.nodes, mapId),
       links: remapBoardLinks(entry.links, mapId)
+    })),
+    comments: imported.comments.map((comment) => ({
+      ...comment,
+      id: mapId(comment.id)!,
+      taskId: mapId(comment.taskId)!
     })),
     settings: imported.settings
   }
@@ -588,6 +607,7 @@ export function mergePayloads(current: DataPayload, imported: DataPayload): Data
       ...remapped.drafts
     ],
     boardHistory: [...current.boardHistory, ...remapped.boardHistory].slice(-20),
+    comments: mergeById(current.comments, remapped.comments),
     settings: current.settings
   }
 }
@@ -664,15 +684,31 @@ export function importAsNewProject(sourcePath: string): DataPayload {
     notes: [...current.notes, ...remapped.notes],
     activityLogs: [...current.activityLogs, ...remapped.activityLogs].slice(-500),
     weeklyGoals: [...current.weeklyGoals, ...remapped.weeklyGoals],
-    boardNodes: [...current.boardNodes, ...remapped.boardNodes],
-    boardLinks: [...current.boardLinks, ...remapped.boardLinks],
-    boardGroups: [...current.boardGroups, ...remapped.boardGroups],
+    boardNodes: [
+      ...current.boardNodes,
+      ...remapped.boardNodes.map((node) => ({ ...node, projectId }))
+    ],
+    boardLinks: [
+      ...current.boardLinks,
+      ...remapped.boardLinks.map((link) => ({ ...link, projectId }))
+    ],
+    boardGroups: [
+      ...current.boardGroups,
+      ...remapped.boardGroups.map((group) => ({ ...group, projectId }))
+    ],
     taskAttachments: [...current.taskAttachments, ...remapped.taskAttachments],
-    sprints: [...current.sprints, ...remapped.sprints],
-    boardSnapshots: [...current.boardSnapshots, ...remapped.boardSnapshots],
+    sprints: [
+      ...current.sprints,
+      ...remapped.sprints.map((sprint) => ({ ...sprint, projectId }))
+    ],
+    boardSnapshots: [
+      ...current.boardSnapshots,
+      ...remapped.boardSnapshots.map((snapshot) => ({ ...snapshot, projectId }))
+    ],
     smartRules: [...current.smartRules, ...remapped.smartRules],
     drafts: [...current.drafts, ...remapped.drafts],
     boardHistory: [...current.boardHistory, ...remapped.boardHistory].slice(-20),
+    comments: [...current.comments, ...remapped.comments],
     settings: current.settings
   }
 

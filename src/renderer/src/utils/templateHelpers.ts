@@ -43,6 +43,8 @@ export function applyTemplate(data: DataPayload, templateId: string): DataPayloa
     dependsOnTaskId: null,
     pinned: false,
     archived: false,
+    assigneeUserId: null,
+    revision: 0,
     sortOrder: data.tasks.length,
     createdAt: now,
     updatedAt: now

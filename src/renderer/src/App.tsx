@@ -163,7 +163,10 @@ export default function App(): JSX.Element {
   const renderMain = (): JSX.Element => {
     if (activeView === 'calendar') return <CalendarView />
     if (activeView === 'stats') return <StatsView />
-    if (activeView === 'board') return <BoardView />
+    if (activeView === 'board' || activeView.startsWith('board:')) {
+      const boardProjectId = activeView === 'board' ? null : activeView.slice('board:'.length)
+      return <BoardView boardProjectId={boardProjectId} />
+    }
     if (activeView === 'notes') return <NotesView />
     if (activeView === 'focus') return <FocusView />
     if (activeView === 'timeline') return <TimelineView />
@@ -224,8 +227,9 @@ export default function App(): JSX.Element {
           setActiveView('notes')
           setGlobalSearchOpen(false)
         }}
-        onSelectBoardNode={() => {
-          setActiveView('board')
+        onSelectBoardNode={(nodeId) => {
+          const node = data.boardNodes.find((item) => item.id === nodeId)
+          setActiveView(node?.projectId ? `board:${node.projectId}` : 'board')
           setGlobalSearchOpen(false)
         }}
       />
