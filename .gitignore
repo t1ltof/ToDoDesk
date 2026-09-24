@@ -20,3 +20,5 @@ data-dev/
 
 # Локальное
 *.local
+.grok/
+project_structure.txt
