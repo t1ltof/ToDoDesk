@@ -92,11 +92,10 @@ export function collectDescendantIds(data: DataPayload, taskId: string): Set<str
   return ids
 }
 
-export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
-  const ids = collectDescendantIds(data, taskId)
+function removeTasksByIds(data: DataPayload, ids: Set<string>): DataPayload {
   const attachments = data.taskAttachments.filter((item) => ids.has(item.taskId))
   for (const attachment of attachments) {
-    void window.tododesk.deleteAttachmentFile(attachment.filePath)
+    void globalThis.window?.tododesk?.deleteAttachmentFile(attachment.filePath)
   }
 
   const next = {
@@ -113,6 +112,10 @@ export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
   }
 
   return pruneBoardForTaskIds(next, ids)
+}
+
+export function deleteTaskTree(data: DataPayload, taskId: string): DataPayload {
+  return removeTasksByIds(data, collectDescendantIds(data, taskId))
 }
 
 export function updateTask(
@@ -290,21 +293,7 @@ export function setTaskPriority(data: DataPayload, taskId: string, priority: Pri
 
 export function clearCompletedTasks(data: DataPayload): DataPayload {
   const doneIds = new Set(data.tasks.filter((task) => task.status === 'done').map((task) => task.id))
-
-  const next = {
-    ...data,
-    tasks: data.tasks.filter((task) => !doneIds.has(task.id)),
-    taskTags: data.taskTags.filter((link) => !doneIds.has(link.taskId)),
-    checklistItems: data.checklistItems.filter((item) => !doneIds.has(item.taskId)),
-    reminders: data.reminders.filter((item) => !doneIds.has(item.taskId)),
-    taskAttachments: data.taskAttachments.filter((item) => !doneIds.has(item.taskId)),
-    sprints: data.sprints.map((sprint) => ({
-      ...sprint,
-      taskIds: sprint.taskIds.filter((id) => !doneIds.has(id))
-    }))
-  }
-
-  return pruneBoardForTaskIds(next, doneIds)
+  return removeTasksByIds(data, doneIds)
 }
 
 export function reorderTasks(data: DataPayload, orderedIds: string[]): DataPayload {
