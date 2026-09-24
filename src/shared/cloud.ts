@@ -1,4 +1,20 @@
-import type { DataPayload } from './schema'
+import type { DataPayload, Project } from './schema'
+import type { ProjectSlice } from './projectSlice'
+
+export type MemberRole = 'owner' | 'admin' | 'editor' | 'viewer'
+
+export interface CloudMember {
+  userId: string
+  login: string
+  displayName: string
+  role: MemberRole
+}
+
+export interface CloudMembership {
+  projectId: string
+  role: MemberRole
+  members: CloudMember[]
+}
 
 export interface CloudUser {
   id: string
@@ -30,3 +46,19 @@ export interface CloudSyncResult {
 }
 
 export const DEFAULT_CLOUD_SERVER_URL = 'https://tododesk.91.186.212.152.sslip.io'
+
+export interface CloudInviteResult {
+  ok: boolean
+  error?: string
+  token?: string
+  url?: string
+  appUrl?: string
+}
+
+export interface CloudProjectBundle {
+  project: Project
+  slice: ProjectSlice
+  revision: number
+  role: MemberRole
+  members: CloudMember[]
+}

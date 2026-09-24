@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import type { MemberRole } from '../../../shared/api'
 import type { Project } from '../../../shared/schema'
+import { canManageMembers, membershipFor } from '../utils/cloudAccess'
 import { deleteProject, updateProject } from '../utils/projectHelpers'
 import { useAppStore } from '../store/useAppStore'
 
@@ -17,6 +19,11 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
   const [name, setName] = useState(project?.name ?? '')
   const [color, setColor] = useState(project?.color ?? COLORS[0])
   const [icon, setIcon] = useState(project?.icon ?? '')
+  const [inviteRole, setInviteRole] = useState<MemberRole>('editor')
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const membership = project ? membershipFor(data, project.id) : null
+  const cloud = data.settings.profileMode === 'cloud' && Boolean(data.settings.cloudUserId)
 
   useEffect(() => {
     if (project) {
@@ -100,6 +107,80 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
             />
           ))}
         </div>
+
+        {isEdit && cloud && project && (
+          <div className="mt-5 rounded-lg border border-surface-border p-3">
+            <p className="mb-2 text-sm font-medium">Участники</p>
+            {membership ? (
+              <ul className="mb-3 space-y-1 text-sm text-gray-300">
+                {membership.members.map((member) => (
+                  <li key={member.userId} className="flex items-center justify-between gap-2">
+                    <span>
+                      {member.displayName}{' '}
+                      <span className="text-xs text-gray-500">{member.role}</span>
+                    </span>
+                    {canManageMembers(data, project.id) &&
+                      member.role !== 'owner' &&
+                      member.userId !== data.settings.cloudUserId && (
+                        <button
+                          type="button"
+                          className="text-xs text-red-300"
+                          onClick={async () => {
+                            const result = await window.tododesk.cloudRemoveMember(
+                              project.id,
+                              member.userId
+                            )
+                            if (result.ok) await window.tododesk.cloudPullNow()
+                          }}
+                        >
+                          Исключить
+                        </button>
+                      )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mb-3 text-xs text-gray-500">Проект ещё не опубликован в облаке.</p>
+            )}
+            {(!membership || canManageMembers(data, project.id)) && (
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={inviteRole}
+                  onChange={(event) => setInviteRole(event.target.value as MemberRole)}
+                  className="rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-sm"
+                >
+                  <option value="editor">Редактор</option>
+                  <option value="admin">Админ</option>
+                  <option value="viewer">Наблюдатель</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={inviteBusy}
+                  onClick={async () => {
+                    setInviteBusy(true)
+                    const result = await window.tododesk.cloudInvite(project.id, inviteRole)
+                    setInviteBusy(false)
+                    if (!result.ok) {
+                      alert(result.error ?? 'Не удалось создать ссылку')
+                      return
+                    }
+                    const link = result.url ?? result.appUrl ?? ''
+                    setInviteUrl(link)
+                    if (link) void navigator.clipboard.writeText(link)
+                    await persist(useAppStore.getState().data)
+                    await window.tododesk.cloudPullNow()
+                  }}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-sm text-white"
+                >
+                  Пригласить
+                </button>
+              </div>
+            )}
+            {inviteUrl && (
+              <p className="mt-2 break-all text-xs text-gray-500">Ссылка скопирована: {inviteUrl}</p>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 flex justify-between gap-2">
           {isEdit ? (

@@ -48,13 +48,20 @@ import {
 import type { DataPayload } from '../shared/schema'
 import type { SyncConflictChoice } from '../shared/sync'
 import {
+  acceptInviteAndMerge,
   cloudLogin,
   cloudLogout,
   cloudPull,
   cloudPush,
   getCloudSessionInfo,
-  isCloudSession
+  isCloudSession,
+  overlaySharedProjects,
+  removeProjectMember,
+  shareAndInvite,
+  startCloudWatch,
+  stopCloudWatch
 } from './cloudClient'
+import type { MemberRole } from '../shared/cloud'
 
 const isDev = !app.isPackaged
 const isE2e = process.env.TODODESK_E2E === '1'
@@ -141,12 +148,37 @@ async function loadDataWithCloud(): Promise<DataPayload> {
     return pulled.data
   }
   if (pulled.ok && !pulled.data) {
+    const overlaid = await overlaySharedProjects(local)
+    if (overlaid.settings.cloudMemberships.length > 0) {
+      saveData(overlaid)
+      return overlaid
+    }
     const pushed = await cloudPush(local)
     if (!pushed.ok) {
       console.error(pushed.error)
     }
   }
   return local
+}
+
+function inviteTokenFromArg(arg: string): string | null {
+  if (arg.startsWith('tododesk://invite/')) {
+    return decodeURIComponent(arg.replace('tododesk://invite/', '').split(/[?#]/)[0] ?? '')
+  }
+  if (arg.startsWith('tododesk:invite/')) {
+    return decodeURIComponent(arg.replace('tododesk:invite/', '').split(/[?#]/)[0] ?? '')
+  }
+  return null
+}
+
+async function handleInviteToken(token: string): Promise<void> {
+  if (!token || !isCloudSession()) return
+  const result = await acceptInviteAndMerge(token, loadData())
+  if (result.ok && result.data) {
+    saveData(result.data)
+    applySettings(result.data)
+    broadcastData(result.data)
+  }
 }
 
 function refreshTray(data?: DataPayload): void {
@@ -206,10 +238,19 @@ const gotLock = isE2e || app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => showMainWindow())
+  app.on('second-instance', (_event, argv) => {
+    const token = argv.map(inviteTokenFromArg).find((value): value is string => Boolean(value))
+    if (token) void handleInviteToken(token)
+    showMainWindow()
+  })
 
   app.whenReady().then(() => {
     app.setAppUserModelId('com.t1ltof.tododesk')
+    if (process.defaultApp) {
+      app.setAsDefaultProtocolClient('tododesk', process.execPath, [process.argv[1]])
+    } else {
+      app.setAsDefaultProtocolClient('tododesk')
+    }
 
     protocol.handle('tododesk-attachment', (request) => {
       try {
@@ -250,9 +291,18 @@ if (!gotLock) {
     )
 
     ipcMain.handle('cloud:login', async (_, serverUrl: string, login: string, password: string) => {
-      return cloudLogin(serverUrl, login, password)
+      const result = await cloudLogin(serverUrl, login, password)
+      if (result.ok) {
+        startCloudWatch((updated) => {
+          saveData(updated)
+          applySettings(updated)
+          broadcastData(updated)
+        })
+      }
+      return result
     })
     ipcMain.handle('cloud:logout', () => {
+      stopCloudWatch()
       cloudLogout()
     })
     ipcMain.handle('cloud:status', () => getCloudSessionInfo())
@@ -265,6 +315,25 @@ if (!gotLock) {
       }
       return result
     })
+    ipcMain.handle(
+      'cloud:invite',
+      async (_, projectId: string, role: MemberRole) => {
+        return shareAndInvite(loadData(), projectId, role)
+      }
+    )
+    ipcMain.handle('cloud:accept-invite', async (_, token: string) => {
+      const result = await acceptInviteAndMerge(token, loadData())
+      if (result.ok && result.data) {
+        saveData(result.data)
+        applySettings(result.data)
+        broadcastData(result.data)
+      }
+      return result
+    })
+    ipcMain.handle(
+      'cloud:remove-member',
+      async (_, projectId: string, userId: string) => removeProjectMember(projectId, userId)
+    )
 
     ipcMain.handle('data:export', async (_, mergeWithCurrent?: boolean) => {
       const result = await dialog.showSaveDialog(mainWindow!, {
@@ -402,6 +471,15 @@ if (!gotLock) {
     applySettings(data)
     refreshSyncStatus(data)
     updateTrayTooltip(data)
+    if (isCloudSession()) {
+      startCloudWatch((updated) => {
+        saveData(updated)
+        applySettings(updated)
+        broadcastData(updated)
+      })
+    }
+    const bootToken = process.argv.map(inviteTokenFromArg).find((value): value is string => Boolean(value))
+    if (bootToken) void handleInviteToken(bootToken)
     startSyncScheduler(() => refreshTray())
     startScheduledExportTimer()
     checkDueTasks(data, getWindow)
@@ -415,6 +493,7 @@ if (!gotLock) {
     stopSyncWatcher()
     stopSyncScheduler()
     stopScheduledExportTimer()
+    stopCloudWatch()
     unregisterHotkeys()
   })
 }

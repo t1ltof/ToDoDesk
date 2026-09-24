@@ -44,6 +44,7 @@ export default function SettingsDialog({
   const [cloudPassword, setCloudPassword] = useState('')
   const [cloudBusy, setCloudBusy] = useState(false)
   const [cloudMessage, setCloudMessage] = useState<string | null>(null)
+  const [inviteToken, setInviteToken] = useState('')
 
   useEffect(() => {
     void window.tododesk.getSyncStatus().then(setSyncStatus)
@@ -375,6 +376,32 @@ export default function SettingsDialog({
                   <p className="text-sm text-gray-300">
                     {cloudStatus.displayName ?? cloudStatus.login} · ревизия {cloudStatus.revision ?? 0}
                   </p>
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      value={inviteToken}
+                      onChange={(e) => setInviteToken(e.target.value)}
+                      placeholder="Токен приглашения"
+                      className="flex-1 rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      disabled={cloudBusy || !inviteToken.trim()}
+                      onClick={async () => {
+                        setCloudBusy(true)
+                        const result = await window.tododesk.cloudAcceptInvite(inviteToken.trim())
+                        setCloudBusy(false)
+                        if (!result.ok) {
+                          setCloudMessage(result.error ?? 'Не удалось принять')
+                          return
+                        }
+                        setInviteToken('')
+                        setCloudMessage('Приглашение принято')
+                      }}
+                      className="rounded-lg border border-surface-border px-3 py-2 text-sm"
+                    >
+                      Принять
+                    </button>
+                  </div>
                   <button
                     type="button"
                     disabled={cloudBusy}

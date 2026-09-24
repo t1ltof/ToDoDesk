@@ -224,6 +224,18 @@ export const draftSchema = z.object({
 })
 
 export const scheduledExportFormatSchema = z.enum(['tododesk', 'csv', 'both'])
+export const memberRoleSchema = z.enum(['owner', 'admin', 'editor', 'viewer'])
+export const cloudMemberSchema = z.object({
+  userId: z.string().uuid(),
+  login: z.string().min(1),
+  displayName: z.string().min(1),
+  role: memberRoleSchema
+})
+export const cloudMembershipSchema = z.object({
+  projectId: z.string().uuid(),
+  role: memberRoleSchema,
+  members: z.array(cloudMemberSchema).default([])
+})
 
 export const boardHistoryEntrySchema = z.object({
   id: z.string().uuid(),
@@ -273,7 +285,8 @@ export const settingsSchema = z.object({
   todayOnlyMaxTasks: z.number().int().min(0).max(50).default(0),
   profileMode: z.enum(['local', 'cloud']).default('local'),
   cloudUserId: z.string().nullable().default(null),
-  cloudServerUrl: z.string().nullable().default(null)
+  cloudServerUrl: z.string().nullable().default(null),
+  cloudMemberships: z.array(cloudMembershipSchema).default([])
 })
 
 export const dataPayloadSchema = z.object({
@@ -358,6 +371,7 @@ export type ViewId =
   | 'sprint'
   | 'next'
   | 'weekly-review'
+  | 'assigned'
   | `tag:${string}`
   | `project:${string}`
   | `kanban:${string}`

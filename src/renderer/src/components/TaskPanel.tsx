@@ -33,6 +33,7 @@ import clsx from 'clsx'
 const viewTitles: Record<string, string> = {
   today: 'Сегодня',
   inbox: 'Входящие',
+  assigned: 'На мне',
   all: 'Все задачи',
   completed: 'Выполненные задачи'
 }

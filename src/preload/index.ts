@@ -42,6 +42,10 @@ const api: ToDoDeskApi = {
   cloudLogout: () => ipcRenderer.invoke('cloud:logout'),
   cloudStatus: () => ipcRenderer.invoke('cloud:status'),
   cloudPullNow: () => ipcRenderer.invoke('cloud:pull'),
+  cloudInvite: (projectId, role) => ipcRenderer.invoke('cloud:invite', projectId, role),
+  cloudAcceptInvite: (token) => ipcRenderer.invoke('cloud:accept-invite', token),
+  cloudRemoveMember: (projectId, userId) =>
+    ipcRenderer.invoke('cloud:remove-member', projectId, userId),
   onDataUpdated: (callback) => {
     const listener = (_: Electron.IpcRendererEvent, data) => callback(data)
     ipcRenderer.on('data:updated', listener)
