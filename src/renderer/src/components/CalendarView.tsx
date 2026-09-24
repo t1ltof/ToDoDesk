@@ -264,7 +264,7 @@ export default function CalendarView(): JSX.Element {
   }
 
   return (
-    <section className="flex h-full flex-1 overflow-hidden">
+    <section className="flex h-full min-w-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="border-b border-surface-border bg-surface-elevated/50 px-6 py-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">

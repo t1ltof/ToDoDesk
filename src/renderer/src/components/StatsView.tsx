@@ -1,5 +1,6 @@
 import { Download } from 'lucide-react'
 import { useMemo } from 'react'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { getStats, useAppStore } from '../store/useAppStore'
 import { getHeatmapDays, getWeekDays, getWeekKey, localDateKey } from '../utils/calendarUtils'
 import { buildWeeklyReport, downloadTextReport } from '../utils/reportExport'
@@ -17,6 +18,7 @@ function heatColor(count: number, max: number): string {
 
 export default function StatsView(): JSX.Element {
   const { data } = useAppStore()
+  const { chromeNarrow } = useDesktopLayout()
   const stats = useMemo(() => getStats(data), [data])
   const weekKey = getWeekKey()
   const goalsProgress = useMemo(() => getWeeklyGoalsProgress(data, weekKey), [data, weekKey])
@@ -122,8 +124,8 @@ export default function StatsView(): JSX.Element {
   const daysPerWeek = 7
 
   return (
-    <section className="flex h-full flex-1 flex-col overflow-y-auto p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <section className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto p-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-semibold">Статистика</h2>
         <button
           type="button"
@@ -135,7 +137,7 @@ export default function StatsView(): JSX.Element {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className={clsx('grid gap-4', chromeNarrow ? 'grid-cols-2' : 'grid-cols-3')}>
         {cards.map((card) => (
           <div
             key={card.label}

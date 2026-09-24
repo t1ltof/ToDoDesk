@@ -4,11 +4,13 @@ import type { Note } from '../../../shared/schema'
 import MarkdownContent from './MarkdownContent'
 import { filterNotes } from '../utils/calendarFilters'
 import { createNote, deleteNote, updateNote } from '../utils/noteHelpers'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
 export default function NotesView(): JSX.Element {
   const { data, persist } = useAppStore()
+  const { detailNarrow } = useDesktopLayout()
   const [selectedId, setSelectedId] = useState<string | null>(data.notes[0]?.id ?? null)
   const [newTitle, setNewTitle] = useState('')
   const [contentMode, setContentMode] = useState<'edit' | 'preview'>('edit')
@@ -46,8 +48,13 @@ export default function NotesView(): JSX.Element {
   }
 
   return (
-    <section className="flex h-full flex-1 overflow-hidden">
-      <div className="flex w-72 flex-col border-r border-surface-border bg-surface-elevated">
+    <section className="flex h-full min-w-0 flex-1 overflow-hidden">
+      <div
+        className={clsx(
+          'flex shrink-0 flex-col border-r border-surface-border bg-surface-elevated',
+          detailNarrow ? 'w-56' : 'w-72'
+        )}
+      >
         <div className="border-b border-surface-border p-4">
           <h2 className="text-lg font-semibold">Заметки</h2>
           <input
@@ -103,7 +110,7 @@ export default function NotesView(): JSX.Element {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-6">
+      <div className="flex min-w-0 flex-1 flex-col p-6">
         {selected ? (
           <>
             <div className="mb-4 flex items-center justify-between gap-4">

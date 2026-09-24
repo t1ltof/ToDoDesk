@@ -57,7 +57,7 @@ export default function FocusView(): JSX.Element {
   const progress = 1 - secondsLeft / totalSeconds
 
   return (
-    <section className="flex h-full flex-1 flex-col items-center justify-center p-8">
+    <section className="flex h-full min-w-0 flex-1 flex-col items-center justify-center overflow-hidden p-8">
       <div className="w-full max-w-md text-center">
         <div className="mb-2 flex items-center justify-center gap-2 text-gray-400">
           <Timer size={18} />

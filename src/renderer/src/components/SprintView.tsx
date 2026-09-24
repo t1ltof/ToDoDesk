@@ -9,11 +9,13 @@ import {
   updateSprint
 } from '../utils/sprintHelpers'
 import { addDaysToDateKey, localDateKey } from '../utils/calendarUtils'
+import { useDesktopLayout } from '../hooks/useDesktopLayout'
 import { useAppStore } from '../store/useAppStore'
 import clsx from 'clsx'
 
 export default function SprintView(): JSX.Element {
   const { data, persist, setSelectedTaskId } = useAppStore()
+  const { detailNarrow } = useDesktopLayout()
   const [selectedSprintId, setSelectedSprintId] = useState<string | null>(data.sprints[0]?.id ?? null)
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
@@ -67,8 +69,13 @@ export default function SprintView(): JSX.Element {
   }
 
   return (
-    <section className="flex h-full flex-1 overflow-hidden">
-      <div className="flex w-72 flex-col border-r border-surface-border bg-surface-elevated">
+    <section className="flex h-full min-w-0 flex-1 overflow-hidden">
+      <div
+        className={clsx(
+          'flex shrink-0 flex-col border-r border-surface-border bg-surface-elevated',
+          detailNarrow ? 'w-56' : 'w-72'
+        )}
+      >
         <div className="border-b border-surface-border p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Спринты</h2>
@@ -155,7 +162,7 @@ export default function SprintView(): JSX.Element {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-6">
         {selectedSprint && progress ? (
           <>
             <div className="mb-6 flex items-start justify-between gap-4">

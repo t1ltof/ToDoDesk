@@ -48,7 +48,7 @@ export default function TimelineView(): JSX.Element {
   }, [data.tasks, days])
 
   return (
-    <section className="flex h-full flex-1 flex-col overflow-hidden p-6">
+    <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden p-6">
       <div className="mb-4">
         <h2 className="text-xl font-semibold">Таймлайн</h2>
         <p className="text-sm text-gray-400">Следующие 30 дней — задачи со сроком</p>
