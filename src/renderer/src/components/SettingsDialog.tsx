@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FontSize, ScheduledExportFormat, Settings, Theme } from '../../../shared/schema'
-import type { SyncStatusInfo } from '../../../shared/api'
+import type { CloudSessionInfo, SyncStatusInfo } from '../../../shared/api'
+import { DEFAULT_CLOUD_SERVER_URL } from '../../../shared/cloud'
 import { useAppStore } from '../store/useAppStore'
 import {
   ensureOverdueSmartRule,
@@ -38,14 +39,21 @@ export default function SettingsDialog({
   const [activityLogOpen, setActivityLogOpen] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
   const [syncStatus, setSyncStatus] = useState<SyncStatusInfo | null>(null)
+  const [cloudStatus, setCloudStatus] = useState<CloudSessionInfo | null>(null)
+  const [cloudLogin, setCloudLogin] = useState('')
+  const [cloudPassword, setCloudPassword] = useState('')
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null)
 
   useEffect(() => {
     void window.tododesk.getSyncStatus().then(setSyncStatus)
+    void window.tododesk.cloudStatus().then(setCloudStatus)
     const timer = setInterval(() => {
       void window.tododesk.getSyncStatus().then(setSyncStatus)
+      void window.tododesk.cloudStatus().then(setCloudStatus)
     }, 5000)
     return () => clearInterval(timer)
-  }, [settings.syncFolderPath, settings.syncAutoPushEnabled, settings.syncLastPushAt])
+  }, [settings.syncFolderPath, settings.syncAutoPushEnabled, settings.syncLastPushAt, settings.profileMode])
 
   const update = async (patch: Partial<Settings>): Promise<void> => {
     const current = useAppStore.getState().data
@@ -353,6 +361,98 @@ export default function SettingsDialog({
               </div>
             </div>
 
+            <div className="rounded-lg border border-surface-border p-3">
+              <p className="mb-2 text-sm font-medium">Облако</p>
+              <input
+                type="text"
+                value={settings.cloudServerUrl ?? DEFAULT_CLOUD_SERVER_URL}
+                onChange={(e) => void update({ cloudServerUrl: e.target.value.trim() || null })}
+                placeholder={DEFAULT_CLOUD_SERVER_URL}
+                className="mb-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+              />
+              {cloudStatus?.connected ? (
+                <>
+                  <p className="text-sm text-gray-300">
+                    {cloudStatus.displayName ?? cloudStatus.login} · ревизия {cloudStatus.revision ?? 0}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={cloudBusy}
+                    onClick={async () => {
+                      setCloudBusy(true)
+                      await window.tododesk.cloudLogout()
+                      await update({ profileMode: 'local', cloudUserId: null })
+                      setCloudStatus(await window.tododesk.cloudStatus())
+                      setCloudMessage('Локальный профиль')
+                      setCloudBusy(false)
+                    }}
+                    className="mt-2 w-full rounded-lg border border-surface-border px-3 py-2 text-sm"
+                  >
+                    Выйти из облака
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={cloudLogin}
+                    onChange={(e) => setCloudLogin(e.target.value)}
+                    placeholder="Логин"
+                    className="mb-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="password"
+                    value={cloudPassword}
+                    onChange={(e) => setCloudPassword(e.target.value)}
+                    placeholder="Пароль"
+                    className="mb-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={cloudBusy || !cloudLogin || !cloudPassword}
+                    onClick={async () => {
+                      setCloudBusy(true)
+                      setCloudMessage(null)
+                      const serverUrl = settings.cloudServerUrl ?? DEFAULT_CLOUD_SERVER_URL
+                      const result = await window.tododesk.cloudLogin(serverUrl, cloudLogin, cloudPassword)
+                      if (!result.ok) {
+                        setCloudMessage(result.error ?? 'Ошибка входа')
+                        setCloudBusy(false)
+                        return
+                      }
+                      const pulled = await window.tododesk.cloudPullNow()
+                      const cloudSettings = {
+                        profileMode: 'cloud' as const,
+                        cloudServerUrl: serverUrl,
+                        cloudUserId: result.user?.id ?? null
+                      }
+                      if (pulled.data) {
+                        await persist({
+                          ...pulled.data,
+                          settings: { ...pulled.data.settings, ...cloudSettings }
+                        })
+                      } else {
+                        await update(cloudSettings)
+                      }
+                      setCloudPassword('')
+                      setCloudStatus(await window.tododesk.cloudStatus())
+                      setCloudMessage(
+                        pulled.data
+                          ? 'Данные загружены с сервера'
+                          : 'Облако подключено, локальные данные отправлены'
+                      )
+                      setCloudBusy(false)
+                    }}
+                    className="w-full rounded-lg bg-accent px-3 py-2 text-sm text-white disabled:opacity-50"
+                  >
+                    {cloudBusy ? 'Вход…' : 'Войти'}
+                  </button>
+                </>
+              )}
+              {cloudMessage && <p className="mt-2 text-xs text-gray-500">{cloudMessage}</p>}
+            </div>
+
+            {settings.profileMode !== 'cloud' && (
             <div>
               <p className="mb-2 text-sm text-gray-400">Папка синхронизации</p>
               <input
@@ -417,6 +517,7 @@ export default function SettingsDialog({
                 </button>
               </div>
             </div>
+            )}
 
             <div className="rounded-lg border border-surface-border p-3">
               <p className="mb-2 text-sm font-medium">Плановый экспорт</p>

@@ -124,6 +124,21 @@ npm test
 
 Чеклист перед релизом: [TESTING.md](TESTING.md)
 
+## Облако (self-host)
+
+Личный VPS: `server/` — Fastify + Postgres. Регистрация с улицы выключена, пользователи через `npm run create-user`.
+
+```bash
+cd server
+npm ci
+npm run build
+DATABASE_URL=... JWT_SECRET=... npm run migrate
+DATABASE_URL=... JWT_SECRET=... npm run create-user -- alice 'password'
+HOST=127.0.0.1 PORT=8790 npm start
+```
+
+Клиент: Настройки → Облако → URL сервера, логин, пароль. Локальный профиль остаётся на диске.
+
 ## Стек
 
 - Electron + React + TypeScript

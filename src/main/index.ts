@@ -47,6 +47,14 @@ import {
 } from './syncWatcher'
 import type { DataPayload } from '../shared/schema'
 import type { SyncConflictChoice } from '../shared/sync'
+import {
+  cloudLogin,
+  cloudLogout,
+  cloudPull,
+  cloudPush,
+  getCloudSessionInfo,
+  isCloudSession
+} from './cloudClient'
 
 const isDev = !app.isPackaged
 const isE2e = process.env.TODODESK_E2E === '1'
@@ -122,6 +130,25 @@ function broadcastData(data: DataPayload): void {
   mainWindow?.webContents.send('data:updated', data)
 }
 
+async function loadDataWithCloud(): Promise<DataPayload> {
+  const local = loadData()
+  if (!isCloudSession() || local.settings.profileMode !== 'cloud') {
+    return local
+  }
+  const pulled = await cloudPull()
+  if (pulled.ok && pulled.data) {
+    saveData(pulled.data)
+    return pulled.data
+  }
+  if (pulled.ok && !pulled.data) {
+    const pushed = await cloudPush(local)
+    if (!pushed.ok) {
+      console.error(pushed.error)
+    }
+  }
+  return local
+}
+
 function refreshTray(data?: DataPayload): void {
   const payload = data ?? loadData()
   refreshSyncStatus(payload)
@@ -130,7 +157,7 @@ function refreshTray(data?: DataPayload): void {
 
 function applySettings(data: DataPayload): void {
   applyAutostart(data.settings)
-  const syncPath = data.settings.syncFolderPath
+  const syncPath = data.settings.profileMode === 'cloud' ? null : data.settings.syncFolderPath
   if (syncPath !== lastSyncFolderPath) {
     lastSyncFolderPath = syncPath
     startSyncWatcher(syncPath, (synced) => {
@@ -195,11 +222,11 @@ if (!gotLock) {
       }
     })
 
-    ipcMain.handle('data:load', () => loadData())
-    ipcMain.handle('data:reload', () => loadData())
+    ipcMain.handle('data:load', () => loadDataWithCloud())
+    ipcMain.handle('data:reload', () => loadDataWithCloud())
     ipcMain.handle(
       'data:save',
-      (_, payload: DataPayload | { data: DataPayload; clearUnsaved?: boolean }) => {
+      async (_, payload: DataPayload | { data: DataPayload; clearUnsaved?: boolean }) => {
         const data = 'data' in payload ? payload.data : payload
         const clearUnsaved = 'data' in payload && payload.clearUnsaved === true
         saveData(data)
@@ -211,10 +238,33 @@ if (!gotLock) {
         if (data.settings.syncAutoPushEnabled && data.settings.syncFolderPath) {
           markSyncPending()
         }
+        if (isCloudSession() && data.settings.profileMode === 'cloud') {
+          const pushed = await cloudPush(data)
+          if (!pushed.ok) {
+            console.error(pushed.error)
+          }
+        }
         refreshTray(data)
         return data
       }
     )
+
+    ipcMain.handle('cloud:login', async (_, serverUrl: string, login: string, password: string) => {
+      return cloudLogin(serverUrl, login, password)
+    })
+    ipcMain.handle('cloud:logout', () => {
+      cloudLogout()
+    })
+    ipcMain.handle('cloud:status', () => getCloudSessionInfo())
+    ipcMain.handle('cloud:pull', async () => {
+      const result = await cloudPull()
+      if (result.ok && result.data) {
+        saveData(result.data)
+        applySettings(result.data)
+        broadcastData(result.data)
+      }
+      return result
+    })
 
     ipcMain.handle('data:export', async (_, mergeWithCurrent?: boolean) => {
       const result = await dialog.showSaveDialog(mainWindow!, {
