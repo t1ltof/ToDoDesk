@@ -95,7 +95,9 @@ export interface ToDoDeskApi {
   reloadData: () => Promise<DataPayload>
   saveData: (data: DataPayload, options?: SaveDataOptions) => Promise<DataPayload>
   pickAttachmentFile: () => Promise<StoredAttachment | null>
+  pickSourceFile: () => Promise<string | null>
   copyAttachmentFile: (sourcePath: string, fileName?: string) => Promise<StoredAttachment>
+  uploadProjectAttachment: (projectId: string, sourcePath: string) => Promise<StoredAttachment>
   openAttachmentPath: (filePath: string) => Promise<void>
   deleteAttachmentFile: (filePath: string) => Promise<void>
   exportData: (mergeWithCurrent?: boolean) => Promise<ExportResult | null>

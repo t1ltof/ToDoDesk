@@ -20,8 +20,11 @@ const api: ToDoDeskApi = {
   reloadData: () => ipcRenderer.invoke('data:reload'),
   saveData: (data, options) => ipcRenderer.invoke('data:save', { data, ...options }),
   pickAttachmentFile: () => ipcRenderer.invoke('attachments:pick'),
+  pickSourceFile: () => ipcRenderer.invoke('attachments:pick-source'),
   copyAttachmentFile: (sourcePath, fileName) =>
     ipcRenderer.invoke('attachments:copy', sourcePath, fileName),
+  uploadProjectAttachment: (projectId, sourcePath) =>
+    ipcRenderer.invoke('attachments:upload-project', projectId, sourcePath),
   openAttachmentPath: (filePath) => ipcRenderer.invoke('attachments:open', filePath),
   deleteAttachmentFile: (filePath) => ipcRenderer.invoke('attachments:delete', filePath),
   exportData: (mergeWithCurrent) => ipcRenderer.invoke('data:export', mergeWithCurrent),

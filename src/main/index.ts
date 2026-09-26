@@ -5,6 +5,8 @@ import {
   deleteAttachmentFile,
   getFullAttachmentPath
 } from './attachments'
+import { fetchCloudAttachment, uploadProjectAttachment } from './cloudAttachments'
+import { isCloudAttachmentPath } from '../shared/attachmentLimits'
 import { join } from 'path'
 import { applyAutostart } from './autostart'
 import {
@@ -263,6 +265,9 @@ if (!gotLock) {
         const relativePath = decodeURIComponent(
           request.url.replace(/^tododesk-attachment:\/\//, '')
         )
+        if (isCloudAttachmentPath(relativePath)) {
+          return fetchCloudAttachment(relativePath)
+        }
         return net.fetch(pathToFileURL(getFullAttachmentPath(relativePath)).toString())
       } catch {
         return new Response('Not Found', { status: 404 })
@@ -458,9 +463,20 @@ if (!gotLock) {
       if (result.canceled || result.filePaths.length === 0) return null
       return copyAttachmentToStorage(result.filePaths[0])
     })
+    ipcMain.handle('attachments:pick-source', async () => {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Прикрепить файл',
+        properties: ['openFile']
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      return result.filePaths[0]
+    })
 
     ipcMain.handle('attachments:copy', (_, sourcePath: string, fileName?: string) =>
       copyAttachmentToStorage(sourcePath, fileName)
+    )
+    ipcMain.handle('attachments:upload-project', (_, projectId: string, sourcePath: string) =>
+      uploadProjectAttachment(projectId, sourcePath)
     )
 
     ipcMain.handle('attachments:open', async (_, filePath: string) => {

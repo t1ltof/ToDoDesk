@@ -1,6 +1,8 @@
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { basename, join, resolve, sep } from 'path'
 import { randomUUID } from 'crypto'
+import { isCloudAttachmentPath } from '../shared/attachmentLimits'
+import { deleteCloudAttachment } from './cloudAttachments'
 import { getAttachmentsDirectory, getDataDirectory } from './paths'
 
 export interface StoredAttachment {
@@ -46,6 +48,10 @@ export function copyAttachmentToStorage(sourcePath: string, preferredName?: stri
 }
 
 export function deleteAttachmentFile(relativePath: string): void {
+  if (isCloudAttachmentPath(relativePath)) {
+    void deleteCloudAttachment(relativePath)
+    return
+  }
   const fullPath = getFullAttachmentPath(relativePath)
   if (existsSync(fullPath)) {
     try {
