@@ -47,6 +47,27 @@ function isQuietHours(settings: Settings, now: Date): boolean {
   return nowMin >= startMin || nowMin < endMin
 }
 
+export function notifyNewlyAssigned(
+  previous: DataPayload,
+  next: DataPayload,
+  getWindow: () => BrowserWindow | null
+): void {
+  const me = next.settings.cloudUserId
+  if (!me) return
+  for (const task of next.tasks) {
+    if (task.assigneeUserId !== me || task.status === 'done') continue
+    const old = previous.tasks.find((item) => item.id === task.id)
+    if (old?.assigneeUserId === me) continue
+    showNotification(
+      'Вам назначена задача',
+      task.title,
+      task.id,
+      getWindow,
+      next.settings.notificationSound
+    )
+  }
+}
+
 function showNotification(
   title: string,
   body: string,

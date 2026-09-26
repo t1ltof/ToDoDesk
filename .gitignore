@@ -12,6 +12,7 @@ data.tododesk
 data.tododesk.bak
 data.tododesk.tmp
 cloud-session.bin
+cloud-outbox.json
 backups/
 data-dev/
 

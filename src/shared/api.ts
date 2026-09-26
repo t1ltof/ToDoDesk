@@ -123,6 +123,14 @@ export interface ToDoDeskApi {
   cloudInvite: (projectId: string, role: MemberRole) => Promise<CloudInviteResult>
   cloudAcceptInvite: (token: string) => Promise<CloudSyncResult>
   cloudRemoveMember: (projectId: string, userId: string) => Promise<{ ok: boolean; error?: string }>
+  cloudListInvites: (
+    projectId: string
+  ) => Promise<Array<{ id: string; role: MemberRole; expiresAt: string }>>
+  cloudRevokeInvite: (projectId: string, inviteId: string) => Promise<{ ok: boolean; error?: string }>
+  resolveCloudConflict: (choice: 'local' | 'external' | 'cancel') => Promise<DataPayload>
+  onCloudConflict: (
+    callback: (payload: SyncConflictPayload & { revision: number }) => void
+  ) => () => void
   boardLiveJoin: (boardId: string) => Promise<void>
   boardLiveLeave: () => Promise<void>
   boardLiveSend: (message: BoardLiveMessage) => Promise<void>

@@ -5,6 +5,7 @@ export interface CalendarFilterOptions {
   projectId: string | null
   tagId: string | null
   importantOnly: boolean
+  assigneeUserId?: string | null
 }
 
 export function applyCalendarFilters(data: DataPayload, options: CalendarFilterOptions): DataPayload {
@@ -32,6 +33,10 @@ export function applyCalendarFilters(data: DataPayload, options: CalendarFilterO
 
   if (options.importantOnly) {
     tasks = tasks.filter((task) => task.priority === 'important')
+  }
+
+  if (options.assigneeUserId) {
+    tasks = tasks.filter((task) => task.assigneeUserId === options.assigneeUserId)
   }
 
   return { ...data, tasks }

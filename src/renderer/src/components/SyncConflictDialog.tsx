@@ -39,8 +39,7 @@ export default function SyncConflictDialog({
       <div className="w-full max-w-lg rounded-xl border border-amber-700/50 bg-surface-elevated p-6 shadow-xl">
         <h3 className="text-lg font-semibold text-amber-200">Конфликт синхронизации</h3>
         <p className="mt-2 text-sm text-gray-400">
-          Внешний файл данных изменился, пока в приложении есть несохранённые правки. Выберите,
-          какую версию оставить.
+          Данные разошлись. Выберите, какую версию оставить.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

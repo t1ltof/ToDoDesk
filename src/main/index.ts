@@ -23,7 +23,7 @@ import {
 import { createEmptyData } from '../shared/schema'
 import { setDataPassword } from './encryption'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
-import { checkDueTasks, scheduleReminders } from './notifications'
+import { checkDueTasks, notifyNewlyAssigned, scheduleReminders } from './notifications'
 import { getIconPath } from './resources'
 import { createTray, destroyTray, updateTrayTooltip } from './tray'
 import { checkForUpdates } from './updates'
@@ -48,7 +48,7 @@ import {
   stopSyncWatcher
 } from './syncWatcher'
 import type { DataPayload } from '../shared/schema'
-import type { SyncConflictChoice } from '../shared/sync'
+import { buildSyncConflictSummary, type SyncConflictChoice } from '../shared/sync'
 import {
   connectBoardLive,
   disconnectBoardLive,
@@ -60,8 +60,15 @@ import {
   cloudLogin,
   cloudLogout,
   cloudPull,
+  cloudOverwrite,
   cloudPush,
+  flushCloudQueue,
   getCloudSessionInfo,
+  listProjectInvites,
+  pauseCloudFlush,
+  rememberOfflinePush,
+  resumeCloudFlush,
+  revokeProjectInvite,
   isCloudSession,
   overlaySharedProjects,
   removeProjectMember,
@@ -137,6 +144,17 @@ function createWindow(startHidden = false): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+let pendingCloudServer: DataPayload | null = null
+let pendingCloudRevision = 0 = null
+
+function deliverCloudUpdate(next: DataPayload): void {
+  const previous = loadData()
+  notifyNewlyAssigned(previous, next, getWindow)
+  saveData(next)
+  applySettings(next)
+  broadcastData(next)
 }
 
 function broadcastData(data: DataPayload): void {
@@ -296,8 +314,21 @@ if (!gotLock) {
         const skipCloud = 'data' in payload && payload.skipCloud === true
         if (!skipCloud && isCloudSession() && data.settings.profileMode === 'cloud') {
           const pushed = await cloudPush(data)
-          if (!pushed.ok) {
-            console.error(pushed.error)
+          if (pushed.action === 'conflict' && pushed.data) {
+            rememberOfflinePush(data)
+            pauseCloudFlush()
+            pendingCloudServer = pushed.data
+            pendingCloudRevision = pushed.revision ?? 0
+            mainWindow?.webContents.send('cloud:conflict', {
+              local: buildSyncConflictSummary(data),
+              external: buildSyncConflictSummary(pushed.data),
+              revision: pendingCloudRevision
+            })
+          } else if (!pushed.ok) {
+            rememberOfflinePush(data)
+          } else {
+            pendingCloudServer = null
+            resumeCloudFlush()
           }
         }
         refreshTray(data)
@@ -309,9 +340,7 @@ if (!gotLock) {
       const result = await cloudLogin(serverUrl, login, password)
       if (result.ok) {
         startCloudWatch((updated) => {
-          saveData(updated)
-          applySettings(updated)
-          broadcastData(updated)
+          deliverCloudUpdate(updated)
         })
       }
       return result
@@ -360,6 +389,34 @@ if (!gotLock) {
     })
     ipcMain.handle('board-live:send', (_, message: Record<string, unknown>) => {
       sendBoardLive(message)
+    })
+    ipcMain.handle('cloud:list-invites', (_, projectId: string) => listProjectInvites(projectId))
+    ipcMain.handle('cloud:revoke-invite', (_, projectId: string, inviteId: string) =>
+      revokeProjectInvite(projectId, inviteId)
+    )
+    ipcMain.handle('cloud:resolve-conflict', async (_, choice: 'local' | 'external' | 'cancel') => {
+      if (choice === 'cancel') return loadData()
+      if (choice === 'external' && pendingCloudServer) {
+        const serverData = pendingCloudServer
+        pendingCloudServer = null
+        resumeCloudFlush()
+        const { clearCloudQueue } = await import('./cloudOutbox')
+        clearCloudQueue()
+        saveData(serverData)
+        applySettings(serverData)
+        broadcastData(serverData)
+        return serverData
+      }
+      const local = loadData()
+      const revision = pendingCloudRevision
+      pendingCloudServer = null
+      const pushed = await cloudOverwrite(local, revision)
+      resumeCloudFlush()
+      if (pushed.ok) {
+        const { clearCloudQueue } = await import('./cloudOutbox')
+        clearCloudQueue()
+      }
+      return loadData()
     })
 
     ipcMain.handle('data:export', async (_, mergeWithCurrent?: boolean) => {
@@ -511,10 +568,9 @@ if (!gotLock) {
     updateTrayTooltip(data)
     if (isCloudSession()) {
       startCloudWatch((updated) => {
-        saveData(updated)
-        applySettings(updated)
-        broadcastData(updated)
+        deliverCloudUpdate(updated)
       })
+      void flushCloudQueue()
     }
     const bootToken = process.argv.map(inviteTokenFromArg).find((value): value is string => Boolean(value))
     if (bootToken) void handleInviteToken(bootToken)

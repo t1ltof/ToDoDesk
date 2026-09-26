@@ -49,6 +49,15 @@ const api: ToDoDeskApi = {
   cloudAcceptInvite: (token) => ipcRenderer.invoke('cloud:accept-invite', token),
   cloudRemoveMember: (projectId, userId) =>
     ipcRenderer.invoke('cloud:remove-member', projectId, userId),
+  cloudListInvites: (projectId) => ipcRenderer.invoke('cloud:list-invites', projectId),
+  cloudRevokeInvite: (projectId, inviteId) =>
+    ipcRenderer.invoke('cloud:revoke-invite', projectId, inviteId),
+  resolveCloudConflict: (choice) => ipcRenderer.invoke('cloud:resolve-conflict', choice),
+  onCloudConflict: (callback) => {
+    const listener = (_: Electron.IpcRendererEvent, payload) => callback(payload)
+    ipcRenderer.on('cloud:conflict', listener)
+    return () => ipcRenderer.removeListener('cloud:conflict', listener)
+  },
   boardLiveJoin: (boardId) => ipcRenderer.invoke('board-live:join', boardId),
   boardLiveLeave: () => ipcRenderer.invoke('board-live:leave'),
   boardLiveSend: (message) => ipcRenderer.invoke('board-live:send', message),

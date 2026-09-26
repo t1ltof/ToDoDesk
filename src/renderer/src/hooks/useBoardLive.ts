@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import * as Y from 'yjs'
 import type { BoardGroup, BoardLink, BoardNode, DataPayload } from '../../../shared/schema'
 import {
   applyEncodedUpdate,
@@ -36,10 +37,12 @@ export function useBoardLive(boardKey: string | null, canEdit: boolean): {
   pushBoard: (data: DataPayload) => void
   pushPositions: (positions: Array<{ id: string; x: number; y: number }>) => void
   setPresence: (nodeId: string | null) => void
+  undoLive: () => boolean
 } {
   const profileMode = useAppStore((state) => state.data.settings.profileMode)
   const live = profileMode === 'cloud'
   const docRef = useRef(createBoardDoc())
+  const undoRef = useRef<Y.UndoManager | null>(null)
   const [peers, setPeers] = useState<PresencePeer[]>([])
   const seeded = useRef(false)
 
@@ -109,7 +112,12 @@ export function useBoardLive(boardKey: string | null, canEdit: boolean): {
       window.tododesk.boardLiveSend({ type: 'update', update: encodeUpdate(update) })
     }
     doc.on('update', onUpdate)
+    undoRef.current = new Y.UndoManager([nodesMap(doc), linksMap(doc), groupsMap(doc)], {
+      trackedOrigins: new Set(['local-full', 'local-pos'])
+    })
     return () => {
+      undoRef.current?.destroy()
+      undoRef.current = null
       doc.off('update', onUpdate)
       unsubscribe()
       window.tododesk.boardLiveLeave()
@@ -136,6 +144,12 @@ export function useBoardLive(boardKey: string | null, canEdit: boolean): {
     setPresence: (nodeId) => {
       if (!live) return
       window.tododesk.boardLiveSend({ type: 'presence', nodeId })
+    },
+    undoLive: () => {
+      const manager = undoRef.current
+      if (!manager || manager.undoStack.length === 0) return false
+      manager.undo()
+      return true
     }
   }
 }
