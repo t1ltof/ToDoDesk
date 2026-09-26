@@ -63,7 +63,7 @@ import {
 } from '../utils/boardBackground'
 import { getChildTasks } from '../store/useAppStore'
 import { attachmentSrcUrl } from '../utils/attachmentHelpers'
-import { canEditProject } from '../utils/cloudAccess'
+import { canEditProject, membershipFor } from '../utils/cloudAccess'
 import { useBoardLive } from '../hooks/useBoardLive'
 import { createRootTask } from '../utils/taskHelpers'
 import BoardAddTaskDialog from './BoardAddTaskDialog'
@@ -178,16 +178,27 @@ function BoardNodeCard({
   }
 
   const handlePickPhoto = async (): Promise<void> => {
-    const picked = await window.tododesk.pickAttachmentFile()
-    if (!picked) return
+    const source = await window.tododesk.pickSourceFile()
+    if (!source) return
     const current = useAppStore.getState().data
-    await persist(
-      withBoardHistory(
-        current,
-        updateBoardNode(current, node.id, { imagePath: picked.filePath }),
-        node.projectId ?? null
+    const shared =
+      current.settings.profileMode === 'cloud' &&
+      Boolean(node.projectId) &&
+      Boolean(membershipFor(current, node.projectId))
+    try {
+      const stored = shared && node.projectId
+        ? await window.tododesk.uploadProjectAttachment(node.projectId, source)
+        : await window.tododesk.copyAttachmentFile(source)
+      await persist(
+        withBoardHistory(
+          current,
+          updateBoardNode(current, node.id, { imagePath: stored.filePath }),
+          node.projectId ?? null
+        )
       )
-    )
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Не удалось загрузить изображение')
+    }
   }
 
   const accent = task ? getProjectColor(data.projects, task.projectId) : node.color

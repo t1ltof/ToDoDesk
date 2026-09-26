@@ -192,16 +192,24 @@ export default function TaskDetail({ onSaveAsTemplate }: TaskDetailProps): JSX.E
   }
 
   const handleAttachFile = async (sourcePath: string, fileName?: string): Promise<void> => {
-    const stored = await window.tododesk.copyAttachmentFile(sourcePath, fileName)
-    const current = useAppStore.getState().data
-    await save(addTaskAttachment(current, task.id, stored.fileName, stored.filePath))
+    try {
+      const projectId = task.projectId
+      const shared =
+        data.settings.profileMode === 'cloud' && Boolean(membershipFor(data, projectId)) && projectId
+      const stored = shared
+        ? await window.tododesk.uploadProjectAttachment(projectId, sourcePath)
+        : await window.tododesk.copyAttachmentFile(sourcePath, fileName)
+      const current = useAppStore.getState().data
+      await save(addTaskAttachment(current, task.id, stored.fileName, stored.filePath))
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Не удалось прикрепить файл')
+    }
   }
 
   const handlePickAttachment = async (): Promise<void> => {
-    const picked = await window.tododesk.pickAttachmentFile()
-    if (!picked) return
-    const current = useAppStore.getState().data
-    await save(addTaskAttachment(current, task.id, picked.fileName, picked.filePath))
+    const source = await window.tododesk.pickSourceFile()
+    if (!source) return
+    await handleAttachFile(source)
   }
 
   const handleAddTag = async (): Promise<void> => {
