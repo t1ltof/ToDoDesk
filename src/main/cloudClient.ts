@@ -17,6 +17,7 @@ import {
   writeCloudSession,
   type CloudSession
 } from './cloudAuth'
+import { clearCloudQueue, hasCloudQueue, queueCloudPush, readCloudQueue } from './cloudOutbox'
 
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, '')
@@ -397,10 +398,69 @@ export async function removeProjectMember(
 
 let watchTimer: ReturnType<typeof setInterval> | null = null
 
+let flushPaused = false
+
+export function pauseCloudFlush(): void {
+  flushPaused = true
+}
+
+export function resumeCloudFlush(): void {
+  flushPaused = false
+}
+
+export async function cloudOverwrite(data: DataPayload, revision: number): Promise<CloudSyncResult> {
+  const session = readCloudSession()
+  if (!session) return { ok: false, error: 'Нет облачной сессии' }
+  writeCloudSession({ ...session, revision })
+  return cloudPush(data)
+}
+
+export async function flushCloudQueue(): Promise<CloudSyncResult | null> {
+  if (flushPaused || !hasCloudQueue() || !isCloudSession()) return null
+  const queued = readCloudQueue()
+  if (!queued) return null
+  const result = await cloudPush(queued)
+  if (result.ok) clearCloudQueue()
+  if (result.action === 'conflict') pauseCloudFlush()
+  return result
+}
+
+export function rememberOfflinePush(data: DataPayload): void {
+  queueCloudPush(data)
+}
+
+export async function listProjectInvites(
+  projectId: string
+): Promise<Array<{ id: string; role: MemberRole; expiresAt: string }>> {
+  const session = readCloudSession()
+  if (!session) return []
+  const response = await api(session, `/projects/${projectId}/invites`)
+  if (!response.ok) return []
+  const body = (await response.json()) as {
+    invites: Array<{ id: string; role: MemberRole; expiresAt: string }>
+  }
+  return body.invites ?? []
+}
+
+export async function revokeProjectInvite(
+  projectId: string,
+  inviteId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const session = readCloudSession()
+  if (!session) return { ok: false, error: 'Нет облачной сессии' }
+  const response = await api(session, `/projects/${projectId}/invites/${inviteId}`, {
+    method: 'DELETE'
+  })
+  if (!response.ok && response.status !== 204) return { ok: false, error: 'Не удалось отозвать' }
+  return { ok: true }
+}
+
 export function startCloudWatch(onData: (data: DataPayload) => void): void {
   stopCloudWatch()
   watchTimer = setInterval(() => {
     void (async () => {
+      const flushed = await flushCloudQueue()
+      if (flushed?.action === 'conflict') return
       const session = readCloudSession()
       if (!session) return
       const list = await api(session, '/projects')
@@ -416,7 +476,7 @@ export function startCloudWatch(onData: (data: DataPayload) => void): void {
       const pulled = await cloudPull()
       if (pulled.ok && pulled.data) onData(pulled.data)
     })()
-  }, 15_000)
+  }, 1_500)
 }
 
 export function stopCloudWatch(): void {

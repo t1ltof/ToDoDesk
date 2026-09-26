@@ -640,7 +640,10 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
   const boardProject = boardKey ? data.projects.find((project) => project.id === boardKey) : null
 
   const canEdit = canEditProject(data, boardKey)
-  const { live, peers, pushBoard, pushPositions, setPresence } = useBoardLive(boardKey, canEdit)
+  const { live, peers, pushBoard, pushPositions, setPresence, undoLive } = useBoardLive(
+    boardKey,
+    canEdit
+  )
   const persistBoard = useCallback(
     async (next: ReturnType<typeof useAppStore.getState>['data']): Promise<void> => {
       const current = useAppStore.getState().data
@@ -1241,6 +1244,11 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
   }
 
   const handleUndoBoard = async (): Promise<void> => {
+    if (live) {
+      const undone = undoLive()
+      showHint(undone ? 'Доска откачена' : 'История доски пуста')
+      return
+    }
     const current = useAppStore.getState().data
     const restored = undoBoardHistory(current, boardKey)
     if (!restored) {

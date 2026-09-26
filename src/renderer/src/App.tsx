@@ -24,6 +24,7 @@ import CommandPaletteDialog from './components/CommandPaletteDialog'
 import GlobalSearchDialog from './components/GlobalSearchDialog'
 import KanbanView from './components/KanbanView'
 import SyncConflictDialog from './components/SyncConflictDialog'
+import UpgradeDialog from './components/UpgradeDialog'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useAppStore } from './store/useAppStore'
 import { applyAccentColor } from './utils/accentColor'
@@ -45,6 +46,8 @@ export default function App(): JSX.Element {
   const [projectTemplatesOpen, setProjectTemplatesOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [syncConflict, setSyncConflict] = useState<SyncConflictPayload | null>(null)
+  const [cloudConflict, setCloudConflict] = useState<SyncConflictPayload | null>(null)
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   const theme = data.settings.theme
   const fontSize = data.settings.fontSize
@@ -126,6 +129,7 @@ export default function App(): JSX.Element {
     const unsubOpenTask = window.tododesk.onOpenTask((taskId) => setSelectedTaskId(taskId))
     const unsubUpdate = window.tododesk.onUpdateAvailable((info) => setUpdateInfo(info))
     const unsubSync = window.tododesk.onSyncConflict((payload) => setSyncConflict(payload))
+    const unsubCloud = window.tododesk.onCloudConflict((payload) => setCloudConflict(payload))
     const unsubNotification = window.tododesk.onNotification(() => {
       if (useAppStore.getState().data.settings.notificationSound) {
         playNotificationBeep()
@@ -139,6 +143,7 @@ export default function App(): JSX.Element {
       unsubOpenTask()
       unsubUpdate()
       unsubSync()
+      unsubCloud()
       unsubNotification()
     }
   }, [setData, setSelectedTaskId])
@@ -151,6 +156,13 @@ export default function App(): JSX.Element {
     root.classList.add(`font-size-${fontSize}`)
     applyAccentColor(accentColor)
   }, [theme, fontSize, accentColor])
+
+  useEffect(() => {
+    if (loading) return
+    if (localStorage.getItem('tododesk.cloudUpgradeDismissed') === '1') return
+    if (data.settings.profileMode === 'cloud') return
+    setShowUpgrade(true)
+  }, [loading, data.settings.profileMode])
 
   if (loading) {
     return (
@@ -243,6 +255,29 @@ export default function App(): JSX.Element {
       {templatesOpen && <TemplatesDialog onClose={() => setTemplatesOpen(false)} />}
       {projectTemplatesOpen && (
         <ProjectTemplatesDialog onClose={() => setProjectTemplatesOpen(false)} />
+      )}
+      {showUpgrade && (
+        <UpgradeDialog
+          onStayLocal={() => {
+            localStorage.setItem('tododesk.cloudUpgradeDismissed', '1')
+            setShowUpgrade(false)
+          }}
+          onOpenCloud={() => {
+            localStorage.setItem('tododesk.cloudUpgradeDismissed', '1')
+            setShowUpgrade(false)
+            setSettingsOpen(true)
+          }}
+        />
+      )}
+      {cloudConflict && (
+        <SyncConflictDialog
+          conflict={cloudConflict}
+          onResolve={async (choice) => {
+            const resolved = await window.tododesk.resolveCloudConflict(choice)
+            if (resolved) setData(resolved)
+            setCloudConflict(null)
+          }}
+        />
       )}
       {syncConflict && (
         <SyncConflictDialog

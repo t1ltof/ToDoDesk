@@ -22,6 +22,9 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
   const [inviteRole, setInviteRole] = useState<MemberRole>('editor')
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [inviteBusy, setInviteBusy] = useState(false)
+  const [openInvites, setOpenInvites] = useState<Array<{ id: string; role: string; expiresAt: string }>>(
+    []
+  )
   const membership = project ? membershipFor(data, project.id) : null
   const cloud = data.settings.profileMode === 'cloud' && Boolean(data.settings.cloudUserId)
 
@@ -30,6 +33,7 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
       setName(project.name)
       setColor(project.color)
       setIcon(project.icon ?? '')
+      void window.tododesk.cloudListInvites(project.id).then(setOpenInvites)
     }
   }, [project])
 
@@ -178,6 +182,29 @@ export default function ProjectDialog({ onClose, project }: ProjectDialogProps):
             )}
             {inviteUrl && (
               <p className="mt-2 break-all text-xs text-gray-500">Ссылка скопирована: {inviteUrl}</p>
+            )}
+            {openInvites.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-gray-400">
+                {openInvites.map((invite) => (
+                  <li key={invite.id} className="flex items-center justify-between gap-2">
+                    <span>
+                      {invite.role} до {new Date(invite.expiresAt).toLocaleDateString('ru-RU')}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-red-300"
+                      onClick={async () => {
+                        const result = await window.tododesk.cloudRevokeInvite(project.id, invite.id)
+                        if (result.ok) {
+                          setOpenInvites(await window.tododesk.cloudListInvites(project.id))
+                        }
+                      }}
+                    >
+                      Отозвать
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}

@@ -260,19 +260,56 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       const days = Math.min(30, Math.max(1, Number(body.days) || 7))
       const token = randomBytes(24).toString('base64url')
       const expires = new Date(Date.now() + days * 86_400_000)
+      const url = `${config.publicUrl}/invite/${token}`
+      const inviteId = newId()
       await query(
         `INSERT INTO invites (id, project_id, role, token_hash, expires_at, created_by)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [newId(), id, inviteRole, hashToken(token), expires.toISOString(), user.id]
+        [inviteId, id, inviteRole, hashToken(token), expires.toISOString(), user.id]
       )
-      const url = `${config.publicUrl}/invite/${token}`
       return {
+        id: inviteId,
         token,
         url,
         appUrl: `tododesk://invite/${token}`,
         role: inviteRole,
         expiresAt: expires.toISOString()
       }
+    } catch {
+      return reply.code(401).send({ error: 'Unauthorized' })
+    }
+  })
+
+  app.get('/projects/:id/invites', async (request, reply) => {
+    try {
+      const user = await requireUser(request)
+      const { id } = request.params as { id: string }
+      const role = await membership(id, user.id)
+      if (!role || !canManage(role)) return reply.code(403).send({ error: 'Недостаточно прав' })
+      const rows = await query<{ id: string; role: Role; expires_at: string }>(
+        `SELECT id, role, expires_at::text
+         FROM invites
+         WHERE project_id = $1 AND used_at IS NULL AND expires_at > now()
+         ORDER BY expires_at`,
+        [id]
+      )
+      return { invites: rows.rows.map((row) => ({ id: row.id, role: row.role, expiresAt: row.expires_at })) }
+    } catch {
+      return reply.code(401).send({ error: 'Unauthorized' })
+    }
+  })
+
+  app.delete('/projects/:id/invites/:inviteId', async (request, reply) => {
+    try {
+      const user = await requireUser(request)
+      const { id, inviteId } = request.params as { id: string; inviteId: string }
+      const role = await membership(id, user.id)
+      if (!role || !canManage(role)) return reply.code(403).send({ error: 'Недостаточно прав' })
+      await query('DELETE FROM invites WHERE id = $1 AND project_id = $2 AND used_at IS NULL', [
+        inviteId,
+        id
+      ])
+      return reply.code(204).send()
     } catch {
       return reply.code(401).send({ error: 'Unauthorized' })
     }

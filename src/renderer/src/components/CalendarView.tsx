@@ -87,6 +87,7 @@ export default function CalendarView(): JSX.Element {
   const [calendarProjectId, setCalendarProjectId] = useState<string | null>(null)
   const [calendarTagId, setCalendarTagId] = useState<string | null>(null)
   const [importantOnly, setImportantOnly] = useState(false)
+  const [onlyMine, setOnlyMine] = useState(false)
 
   const today = todayKey()
   const projects = sortProjects(data.projects)
@@ -97,9 +98,10 @@ export default function CalendarView(): JSX.Element {
         search: calendarSearch,
         projectId: calendarProjectId,
         tagId: calendarTagId,
-        importantOnly
+        importantOnly,
+        assigneeUserId: onlyMine ? data.settings.cloudUserId : null
       }),
-    [data, calendarSearch, calendarProjectId, calendarTagId, importantOnly]
+    [data, calendarSearch, calendarProjectId, calendarTagId, importantOnly, onlyMine]
   )
 
   const displayDate = useMemo(() => {
@@ -394,6 +396,16 @@ export default function CalendarView(): JSX.Element {
               />
               Только важные
             </label>
+            {data.settings.cloudUserId && (
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={onlyMine}
+                  onChange={(e) => setOnlyMine(e.target.checked)}
+                />
+                Только мои
+              </label>
+            )}
           </div>
         </div>
 
