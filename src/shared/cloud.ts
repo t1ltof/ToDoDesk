@@ -47,6 +47,21 @@ export interface CloudSyncResult {
 
 export const DEFAULT_CLOUD_SERVER_URL = 'https://tododesk.91.186.212.152.sslip.io'
 
+export interface PresencePeer {
+  userId: string
+  displayName: string
+  nodeId: string | null
+  cursor: { x: number; y: number } | null
+}
+
+export interface BoardLiveMessage {
+  type: string
+  update?: string
+  peers?: PresencePeer[]
+  from?: string
+  nodeId?: string | null
+}
+
 export interface CloudInviteResult {
   ok: boolean
   error?: string

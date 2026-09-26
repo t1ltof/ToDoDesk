@@ -48,6 +48,12 @@ import {
 import type { DataPayload } from '../shared/schema'
 import type { SyncConflictChoice } from '../shared/sync'
 import {
+  connectBoardLive,
+  disconnectBoardLive,
+  sendBoardLive,
+  setBoardLiveHandler
+} from './boardLive'
+import {
   acceptInviteAndMerge,
   cloudLogin,
   cloudLogout,
@@ -267,7 +273,10 @@ if (!gotLock) {
     ipcMain.handle('data:reload', () => loadDataWithCloud())
     ipcMain.handle(
       'data:save',
-      async (_, payload: DataPayload | { data: DataPayload; clearUnsaved?: boolean }) => {
+      async (
+        _,
+        payload: DataPayload | { data: DataPayload; clearUnsaved?: boolean; skipCloud?: boolean }
+      ) => {
         const data = 'data' in payload ? payload.data : payload
         const clearUnsaved = 'data' in payload && payload.clearUnsaved === true
         saveData(data)
@@ -279,7 +288,8 @@ if (!gotLock) {
         if (data.settings.syncAutoPushEnabled && data.settings.syncFolderPath) {
           markSyncPending()
         }
-        if (isCloudSession() && data.settings.profileMode === 'cloud') {
+        const skipCloud = 'data' in payload && payload.skipCloud === true
+        if (!skipCloud && isCloudSession() && data.settings.profileMode === 'cloud') {
           const pushed = await cloudPush(data)
           if (!pushed.ok) {
             console.error(pushed.error)
@@ -334,6 +344,18 @@ if (!gotLock) {
       'cloud:remove-member',
       async (_, projectId: string, userId: string) => removeProjectMember(projectId, userId)
     )
+    setBoardLiveHandler((message) => {
+      mainWindow?.webContents.send('board-live:message', message)
+    })
+    ipcMain.handle('board-live:join', (_, boardId: string) => {
+      connectBoardLive(boardId)
+    })
+    ipcMain.handle('board-live:leave', () => {
+      disconnectBoardLive()
+    })
+    ipcMain.handle('board-live:send', (_, message: Record<string, unknown>) => {
+      sendBoardLive(message)
+    })
 
     ipcMain.handle('data:export', async (_, mergeWithCurrent?: boolean) => {
       const result = await dialog.showSaveDialog(mainWindow!, {
@@ -494,6 +516,7 @@ if (!gotLock) {
     stopSyncScheduler()
     stopScheduledExportTimer()
     stopCloudWatch()
+    disconnectBoardLive()
     unregisterHotkeys()
   })
 }
