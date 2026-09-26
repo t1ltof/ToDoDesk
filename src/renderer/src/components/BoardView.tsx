@@ -64,6 +64,7 @@ import {
 import { getChildTasks } from '../store/useAppStore'
 import { attachmentSrcUrl } from '../utils/attachmentHelpers'
 import { canEditProject } from '../utils/cloudAccess'
+import { useBoardLive } from '../hooks/useBoardLive'
 import { createRootTask } from '../utils/taskHelpers'
 import BoardAddTaskDialog from './BoardAddTaskDialog'
 import BoardInputDialog from './BoardInputDialog'
@@ -134,7 +135,8 @@ function BoardNodeCard({
   onSubtaskClick,
   linkMode,
   isDragging,
-  animatePosition
+  animatePosition,
+  presenceLabel
 }: {
   node: BoardNode
   task: Task | null
@@ -143,6 +145,7 @@ function BoardNodeCard({
   linkMode: boolean
   isDragging: boolean
   animatePosition: boolean
+  presenceLabel?: string
   onActivate: (additive: boolean) => void
   onDelete: () => void
   onDragStart: (e: ReactMouseEvent) => void
@@ -233,6 +236,11 @@ function BoardNodeCard({
         if (node.kind === 'idea') setEditing(true)
       }}
     >
+      {presenceLabel && (
+        <span className="absolute -right-2 -top-2 z-10 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-white">
+          {presenceLabel.slice(0, 2).toUpperCase()}
+        </span>
+      )}
       <div
         className={clsx(
           'flex items-center gap-1.5 border-b px-2 py-1.5',
@@ -620,14 +628,22 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
   const boardKey = boardProjectId ?? null
   const boardProject = boardKey ? data.projects.find((project) => project.id === boardKey) : null
 
+  const canEdit = canEditProject(data, boardKey)
+  const { live, peers, pushBoard, pushPositions, setPresence } = useBoardLive(boardKey, canEdit)
   const persistBoard = useCallback(
     async (next: ReturnType<typeof useAppStore.getState>['data']): Promise<void> => {
       const current = useAppStore.getState().data
       if (!canEditProject(current, boardKey)) return
-      await persist(withBoardHistory(current, next, boardKey))
+      await persist(withBoardHistory(current, next, boardKey), { skipCloud: live })
+      pushBoard(next)
     },
-    [persist, boardKey]
+    [persist, boardKey, live, pushBoard]
   )
+  const pushPositionsRef = useRef(pushPositions)
+  const setPresenceRef = useRef(setPresence)
+  const lastLivePosAt = useRef(0)
+  pushPositionsRef.current = pushPositions
+  setPresenceRef.current = setPresence
   const sectionRef = useRef<HTMLElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const boardRef = useRef<HTMLDivElement>(null)
@@ -928,6 +944,12 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
       useAppStore.setState({
         data: moveBoardNodes(current, positions)
       })
+      const now = Date.now()
+      if (now - lastLivePosAt.current > 80) {
+        lastLivePosAt.current = now
+        pushPositionsRef.current(positions.map((item) => ({ id: item.nodeId, x: item.x, y: item.y })))
+        setPresenceRef.current(currentDrag.primaryNodeId)
+      }
     }
 
     const onUp = (): void => {
@@ -963,6 +985,7 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
           }
         } else if (currentDrag?.kind === 'nodes' && currentDrag.moved) {
           const current = useAppStore.getState().data
+          setPresenceRef.current(null)
           await persistBoard(current)
 
           const suggestion = suggestLinkOnProximity(current.boardNodes, currentDrag.primaryNodeId)
@@ -1294,6 +1317,19 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
         <h2 className="mr-2 truncate text-lg font-semibold">
           {boardProject ? `Доска: ${boardProject.name}` : 'Личная доска'}
         </h2>
+        {live && peers.length > 0 && (
+          <div className="ml-auto flex items-center gap-1">
+            {peers.map((peer) => (
+              <span
+                key={peer.userId}
+                title={peer.displayName}
+                className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-white"
+              >
+                {peer.displayName.slice(0, 2).toUpperCase()}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-1.5">
           <Filter size={14} className="text-gray-500" />
@@ -1671,6 +1707,7 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
                 }}
                 onSubtaskClick={(taskId) => setSelectedTaskId(taskId)}
                 linkMode={linkMode}
+                presenceLabel={peers.find((peer) => peer.nodeId === node.id)?.displayName}
               />
             )
           })}

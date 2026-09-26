@@ -36,7 +36,7 @@ interface AppState {
   clearBulkSelection: () => void
   setData: (data: DataPayload) => void
   load: () => Promise<void>
-  persist: (data: DataPayload, options?: { clearUnsaved?: boolean }) => Promise<void>
+  persist: (data: DataPayload, options?: { clearUnsaved?: boolean; skipCloud?: boolean }) => Promise<void>
   undo: () => Promise<void>
 }
 
@@ -101,12 +101,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ data, loading: false })
   },
 
-  persist: async (data, options?: { clearUnsaved?: boolean }) => {
+  persist: async (data, options?: { clearUnsaved?: boolean; skipCloud?: boolean }) => {
     const run = async (): Promise<void> => {
       const current = get().data
       set({ undoSnapshot: structuredClone(current) })
       const saved = await window.tododesk.saveData(data, {
-        clearUnsaved: options?.clearUnsaved ?? false
+        clearUnsaved: options?.clearUnsaved ?? false,
+        skipCloud: options?.skipCloud ?? false
       })
       set({ data: saved })
     }

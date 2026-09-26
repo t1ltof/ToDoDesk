@@ -1,4 +1,5 @@
 import type {
+  BoardLiveMessage,
   CloudInviteResult,
   CloudLoginResult,
   CloudSessionInfo,
@@ -7,6 +8,7 @@ import type {
 } from './cloud'
 
 export type {
+  BoardLiveMessage,
   CloudInviteResult,
   CloudLoginResult,
   CloudSessionInfo,
@@ -70,6 +72,7 @@ export interface DataLoadFailedPayload {
 
 export interface SaveDataOptions {
   clearUnsaved?: boolean
+  skipCloud?: boolean
 }
 
 export type SyncStatus = 'disabled' | 'idle' | 'synced' | 'pending' | 'error'
@@ -118,6 +121,10 @@ export interface ToDoDeskApi {
   cloudInvite: (projectId: string, role: MemberRole) => Promise<CloudInviteResult>
   cloudAcceptInvite: (token: string) => Promise<CloudSyncResult>
   cloudRemoveMember: (projectId: string, userId: string) => Promise<{ ok: boolean; error?: string }>
+  boardLiveJoin: (boardId: string) => Promise<void>
+  boardLiveLeave: () => Promise<void>
+  boardLiveSend: (message: BoardLiveMessage) => Promise<void>
+  onBoardLiveMessage: (callback: (message: BoardLiveMessage) => void) => () => void
   onDataUpdated: (callback: (data: DataPayload) => void) => () => void
   onDataLoadFailed: (callback: (payload: DataLoadFailedPayload) => void) => () => void
   onQuickAdd: (callback: () => void) => () => void

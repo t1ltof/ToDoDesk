@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS board_docs (
+  board_id TEXT PRIMARY KEY,
+  state BYTEA NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
