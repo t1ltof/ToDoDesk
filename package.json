@@ -1,6 +1,6 @@
 {
   "name": "tododesk",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Десктопный планировщик задач для Windows (portable). Electron + React + TypeScript.",
   "main": "./out/main/index.js",
   "author": "t1ltof",
