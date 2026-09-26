@@ -147,7 +147,7 @@ function createWindow(startHidden = false): void {
 }
 
 let pendingCloudServer: DataPayload | null = null
-let pendingCloudRevision = 0 = null
+let pendingCloudRevision = 0
 
 function deliverCloudUpdate(next: DataPayload): void {
   const previous = loadData()
