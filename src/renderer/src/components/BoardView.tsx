@@ -29,6 +29,7 @@ import {
   addBoardLink,
   addBoardNode,
   alignBoardNodes,
+  bestLinkSides,
   clampNodePosition,
   createIdeaNode,
   createTaskNode,
@@ -38,22 +39,25 @@ import {
   filterBoardNodes,
   getBoardNodePreview,
   getNodeStyleClasses,
+  curveBetween,
+  getNodeAnchor,
   gridLayoutBoardNodes,
   isBoardAnimationsEnabled,
   linkPath,
   moveBoardNodes,
+  nearestNode,
   nodesIntersectingRect,
   restoreBoardSnapshot,
   saveBoardSnapshot,
   snapshotsForBoard,
   screenToWorld,
-  suggestLinkOnProximity,
   undoBoardHistory,
   updateBoardLink,
   updateBoardNode,
   withBoardHistory,
   worldRectFromScreen,
-  type BoardKey
+  type BoardKey,
+  type PinSide
 } from '../utils/boardHelpers'
 import {
   BOARD_BACKGROUND_PRESETS,
@@ -114,6 +118,14 @@ type DragState =
       startY: number
       moved: boolean
     }
+  | {
+      kind: 'link'
+      fromNodeId: string
+      fromSide: PinSide
+      x: number
+      y: number
+      hoverNodeId: string | null
+    }
 
 function getProjectColor(
   projects: ReturnType<typeof useAppStore.getState>['data']['projects'],
@@ -131,12 +143,15 @@ function BoardNodeCard({
   onActivate,
   onDelete,
   onDragStart,
+  onPinDragStart,
   onStyleChange,
   onSubtaskClick,
   linkMode,
   isDragging,
   animatePosition,
-  presenceLabel
+  presenceLabel,
+  linkTarget,
+  showPins
 }: {
   node: BoardNode
   task: Task | null
@@ -146,9 +161,12 @@ function BoardNodeCard({
   isDragging: boolean
   animatePosition: boolean
   presenceLabel?: string
+  linkTarget?: boolean
+  showPins?: boolean
   onActivate: (additive: boolean) => void
   onDelete: () => void
   onDragStart: (e: ReactMouseEvent) => void
+  onPinDragStart: (side: PinSide, e: ReactMouseEvent) => void
   onStyleChange: (style: BoardNodeStyle) => void
   onSubtaskClick: (taskId: string) => void
 }): JSX.Element {
@@ -219,7 +237,8 @@ function BoardNodeCard({
   return (
     <div
       className={clsx(
-        'absolute flex flex-col border-2 shadow-lg transition-shadow',
+        'group absolute flex flex-col border-2 shadow-lg transition-shadow',
+        linkTarget && 'border-emerald-400 ring-2 ring-emerald-400/40',
         styleClasses,
         node.style === 'card' && 'rounded-lg',
         node.style === 'sticker' && 'rounded-sm',
@@ -241,6 +260,11 @@ function BoardNodeCard({
         minHeight: node.height,
         transition: animatePosition && !isDragging ? 'left 0.2s ease, top 0.2s ease' : undefined
       }}
+      onMouseDown={(e) => {
+        const target = e.target as HTMLElement
+        if (target.closest('button,input,textarea,select,[data-pin]')) return
+        onDragStart(e)
+      }}
       onClick={handleCardClick}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('button,input,textarea,select')) return
@@ -256,9 +280,8 @@ function BoardNodeCard({
         className={clsx(
           'flex items-center gap-1.5 border-b px-2 py-1.5',
           node.style === 'card' ? 'border-amber-900/30' : 'border-black/10',
-          linkMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
+          'cursor-grab active:cursor-grabbing'
         )}
-        onMouseDown={linkMode ? undefined : onDragStart}
       >
         <span
           className="h-3 w-3 shrink-0 rounded-full ring-2 ring-amber-200/30"
@@ -482,10 +505,27 @@ function BoardNodeCard({
         )}
       </div>
 
-      <div
-        className="pointer-events-none absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-red-700 shadow-md ring-2 ring-red-900/50"
-        title="Кнопка"
-      />
+      {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
+        <button
+          key={side}
+          type="button"
+          data-pin
+          title="Потяните, чтобы связать"
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            onPinDragStart(side, e)
+          }}
+          className={clsx(
+            'absolute z-20 h-3.5 w-3.5 rounded-full border-2 border-white bg-amber-500 shadow transition hover:scale-125 hover:bg-amber-300',
+            showPins ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+            side === 'top' && 'left-1/2 top-0 -translate-x-1/2 -translate-y-1/2',
+            side === 'right' && 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2',
+            side === 'bottom' && 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2',
+            side === 'left' && 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2'
+          )}
+        />
+      ))}
     </div>
   )
 }
@@ -494,16 +534,19 @@ function LinkLayer({
   links,
   nodes,
   selectedLinkId,
+  draft,
   onSelectLink,
   onEditLink
 }: {
   links: BoardLink[]
   nodes: BoardNode[]
   selectedLinkId: string | null
+  draft: { x1: number; y1: number; x2: number; y2: number } | null
   onSelectLink: (linkId: string) => void
   onEditLink: (linkId: string) => void
 }): JSX.Element {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   return (
     <svg
@@ -511,31 +554,45 @@ function LinkLayer({
       width={BOARD_WIDTH}
       height={BOARD_HEIGHT}
     >
+      <defs>
+        <marker id="board-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#f59e0b" />
+        </marker>
+      </defs>
       {links.map((link) => {
         const from = nodeMap.get(link.fromNodeId)
         const to = nodeMap.get(link.toNodeId)
         if (!from || !to) return null
         const path = linkPath(from, to)
         const selected = selectedLinkId === link.id
-        const midX = (from.x + to.x) / 2 + (from.width + to.width) / 4
-        const midY = (from.y + to.y) / 2
+        const hovered = hoveredId === link.id
+        const start = getNodeAnchor(from, 'center')
+        const end = getNodeAnchor(to, 'center')
+        const midX = (start.x + end.x) / 2
+        const midY = (start.y + end.y) / 2
         return (
           <g
             key={link.id}
             className="pointer-events-auto cursor-pointer"
-            onClick={() => onSelectLink(link.id)}
+            onMouseEnter={() => setHoveredId(link.id)}
+            onMouseLeave={() => setHoveredId((current) => (current === link.id ? null : current))}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelectLink(link.id)
+            }}
             onDoubleClick={(e) => {
               e.stopPropagation()
               onEditLink(link.id)
             }}
           >
+            <path d={path} fill="none" stroke="transparent" strokeWidth={16} />
             <path
               d={path}
               fill="none"
-              stroke={selected ? '#fbbf24' : '#dc2626'}
-              strokeWidth={selected ? 3 : 2}
-              strokeOpacity={0.85}
-              strokeDasharray={selected ? undefined : '6 4'}
+              stroke={selected || hovered ? '#fbbf24' : '#d97706'}
+              strokeWidth={selected ? 3.5 : hovered ? 3 : 2}
+              strokeOpacity={0.95}
+              markerEnd="url(#board-arrow)"
             />
             {link.label ? (
               <g>
@@ -546,15 +603,9 @@ function LinkLayer({
                   height={20}
                   rx={4}
                   fill="#1c1917"
-                  fillOpacity={0.75}
+                  fillOpacity={0.85}
                 />
-                <text
-                  x={midX}
-                  y={midY + 4}
-                  fill="#fca5a5"
-                  fontSize={11}
-                  textAnchor="middle"
-                >
+                <text x={midX} y={midY + 4} fill="#fcd34d" fontSize={11} textAnchor="middle">
                   {link.label}
                 </text>
               </g>
@@ -562,6 +613,16 @@ function LinkLayer({
           </g>
         )
       })}
+      {draft && (
+        <path
+          d={curveBetween({ x: draft.x1, y: draft.y1 }, { x: draft.x2, y: draft.y2 })}
+          fill="none"
+          stroke="#fbbf24"
+          strokeWidth={2.5}
+          strokeDasharray="5 4"
+          markerEnd="url(#board-arrow)"
+        />
+      )}
     </svg>
   )
 }
@@ -920,6 +981,29 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
         return
       }
 
+      if (currentDrag.kind === 'link') {
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (!rect) return
+        const world = screenToWorld(
+          e.clientX,
+          e.clientY,
+          rect,
+          panRef.current.x,
+          panRef.current.y,
+          zoomRef.current
+        )
+        const hover = nearestNode(filteredNodes, world, currentDrag.fromNodeId)
+        const next = {
+          ...currentDrag,
+          x: world.x,
+          y: world.y,
+          hoverNodeId: hover?.id ?? null
+        }
+        dragRef.current = next
+        setDrag(next)
+        return
+      }
+
       if (currentDrag.kind !== 'nodes') return
 
       const rect = containerRef.current?.getBoundingClientRect()
@@ -997,31 +1081,16 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
               suppressNodeClickRef.current = true
             }
           }
+        } else if (currentDrag?.kind === 'link') {
+          if (currentDrag.hoverNodeId) {
+            const current = useAppStore.getState().data
+            await persistBoard(addBoardLink(current, currentDrag.fromNodeId, currentDrag.hoverNodeId))
+            showHint('Связь создана')
+          }
         } else if (currentDrag?.kind === 'nodes' && currentDrag.moved) {
           const current = useAppStore.getState().data
           setPresenceRef.current(null)
           await persistBoard(current)
-
-          const suggestion = suggestLinkOnProximity(current.boardNodes, currentDrag.primaryNodeId)
-          if (suggestion) {
-            const alreadyLinked = current.boardLinks.some(
-              (link) =>
-                (link.fromNodeId === suggestion.fromNodeId &&
-                  link.toNodeId === suggestion.toNodeId) ||
-                (link.fromNodeId === suggestion.toNodeId &&
-                  link.toNodeId === suggestion.fromNodeId)
-            )
-            if (!alreadyLinked) {
-              const fromNode = current.boardNodes.find((n) => n.id === suggestion.fromNodeId)
-              const toNode = current.boardNodes.find((n) => n.id === suggestion.toNodeId)
-              setPendingLink(suggestion)
-              setHint(
-                `Связать «${fromNode?.title ?? '?'}» и «${toNode?.title ?? '?'}»?`
-              )
-            }
-          }
-        } else if (currentDrag?.kind === 'nodes') {
-          await persistBoard(useAppStore.getState().data)
         }
         setDrag(null)
         window.setTimeout(() => {
@@ -1125,6 +1194,24 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
       startX: e.clientX,
       startY: e.clientY,
       moved: false
+    })
+  }
+
+  const handlePinDragStart = (nodeId: string, side: PinSide) => (e: ReactMouseEvent): void => {
+    if (e.button !== 0) return
+    const rect = containerRef.current?.getBoundingClientRect()
+    const node = allNodes.find((item) => item.id === nodeId)
+    if (!rect || !node) return
+    const anchor = getNodeAnchor(node, side)
+    setSelectedLinkId(null)
+    setLinkFromId(nodeId)
+    setDrag({
+      kind: 'link',
+      fromNodeId: nodeId,
+      fromSide: side,
+      x: anchor.x,
+      y: anchor.y,
+      hoverNodeId: null
     })
   }
 
@@ -1660,6 +1747,22 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
             links={links}
             nodes={filteredNodes}
             selectedLinkId={selectedLinkId}
+            draft={
+              drag?.kind === 'link'
+                ? (() => {
+                    const from = allNodes.find((node) => node.id === drag.fromNodeId)
+                    if (!from) return null
+                    const start = getNodeAnchor(from, drag.fromSide)
+                    const hover = drag.hoverNodeId
+                      ? allNodes.find((node) => node.id === drag.hoverNodeId)
+                      : null
+                    const end = hover
+                      ? getNodeAnchor(hover, bestLinkSides(from, hover).to)
+                      : { x: drag.x, y: drag.y }
+                    return { x1: start.x, y1: start.y, x2: end.x, y2: end.y }
+                  })()
+                : null
+            }
             onSelectLink={(id) => {
               setSelectedLinkId(id)
               setSelectedNodeIds(new Set())
@@ -1673,8 +1776,7 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
                 <GitBranch className="mx-auto mb-3 text-amber-600" size={32} />
                 <p className="text-lg font-medium text-amber-100">Пустая доска</p>
                 <p className="mt-2 text-sm">
-                  Добавьте идеи или задачи, перетаскивайте блоки и связывайте их нитями.
-                  Колёсико мыши — масштаб, перетаскивание фона — перемещение по доске.
+                  Тяните блок за карточку. Связь — потяните янтарный пин к другому блоку.
                 </p>
               </div>
             </div>
@@ -1720,6 +1822,9 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
                 onActivate={(additive) => void handleNodeActivate(node.id, additive)}
                 onDelete={() => void deleteNode(node.id)}
                 onDragStart={handleNodeDragStart(node.id)}
+                onPinDragStart={(side, event) => handlePinDragStart(node.id, side)(event)}
+                linkTarget={drag?.kind === 'link' && drag.hoverNodeId === node.id}
+                showPins={drag?.kind === 'link'}
                 onStyleChange={(style) => {
                   const current = useAppStore.getState().data
                   void persistBoard(updateBoardNode(current, node.id, { style }))
@@ -1756,7 +1861,7 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
       </div>
 
       <footer className="shrink-0 border-t border-surface-border bg-surface-elevated px-4 py-1.5 text-xs text-gray-500">
-        Рамка — выделение · Shift + рамка — добавить к выделению · Ctrl + клик — несколько блоков · Пробел + перетаскивание — панорама · Колёсико — масштаб
+        Тяните карточку, чтобы двигать блок. Пин по краю — связь. Двойной щелчок по нити — подпись. Delete — удалить связь. Пробел — панорама, колёсико — масштаб.
         {selectedNodeIds.size > 1 && (
           <span className="ml-2 text-amber-400">Выбрано: {selectedNodeIds.size}</span>
         )}

@@ -280,21 +280,73 @@ export function getNodeStyleClasses(style: BoardNodeStyle): string {
   }
 }
 
-export function getNodeAnchor(
-  node: BoardNode,
-  side: 'top' | 'bottom' | 'center'
-): { x: number; y: number } {
+export type PinSide = 'top' | 'right' | 'bottom' | 'left'
+
+export function getNodeAnchor(node: BoardNode, side: PinSide | 'center'): { x: number; y: number } {
   const cx = node.x + node.width / 2
+  const cy = node.y + node.height / 2
   if (side === 'top') return { x: cx, y: node.y }
   if (side === 'bottom') return { x: cx, y: node.y + node.height }
-  return { x: cx, y: node.y + node.height / 2 }
+  if (side === 'left') return { x: node.x, y: cy }
+  if (side === 'right') return { x: node.x + node.width, y: cy }
+  return { x: cx, y: cy }
+}
+
+export function bestLinkSides(from: BoardNode, to: BoardNode): { from: PinSide; to: PinSide } {
+  const dx = getNodeCenter(to).x - getNodeCenter(from).x
+  const dy = getNodeCenter(to).y - getNodeCenter(from).y
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx >= 0 ? { from: 'right', to: 'left' } : { from: 'left', to: 'right' }
+  }
+  return dy >= 0 ? { from: 'bottom', to: 'top' } : { from: 'top', to: 'bottom' }
+}
+
+export function curveBetween(
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+): string {
+  const dx = Math.max(48, Math.abs(end.x - start.x) * 0.45)
+  const dy = Math.max(48, Math.abs(end.y - start.y) * 0.45)
+  const c1 =
+    Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+      ? { x: start.x + Math.sign(end.x - start.x || 1) * dx, y: start.y }
+      : { x: start.x, y: start.y + Math.sign(end.y - start.y || 1) * dy }
+  const c2 =
+    Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+      ? { x: end.x - Math.sign(end.x - start.x || 1) * dx, y: end.y }
+      : { x: end.x, y: end.y - Math.sign(end.y - start.y || 1) * dy }
+  return `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`
 }
 
 export function linkPath(from: BoardNode, to: BoardNode): string {
-  const start = getNodeAnchor(from, 'bottom')
-  const end = getNodeAnchor(to, 'top')
-  const midY = (start.y + end.y) / 2
-  return `M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`
+  const sides = bestLinkSides(from, to)
+  return curveBetween(getNodeAnchor(from, sides.from), getNodeAnchor(to, sides.to))
+}
+
+export function nearestNode(
+  nodes: BoardNode[],
+  point: { x: number; y: number },
+  exceptId: string,
+  padding = 28
+): BoardNode | null {
+  let best: BoardNode | null = null
+  let bestDist = Infinity
+  for (const node of nodes) {
+    if (node.id === exceptId) continue
+    const inside =
+      point.x >= node.x - padding &&
+      point.x <= node.x + node.width + padding &&
+      point.y >= node.y - padding &&
+      point.y <= node.y + node.height + padding
+    if (!inside) continue
+    const center = getNodeCenter(node)
+    const dist = Math.hypot(point.x - center.x, point.y - center.y)
+    if (dist < bestDist) {
+      best = node
+      bestDist = dist
+    }
+  }
+  return best
 }
 
 export function screenToWorld(
