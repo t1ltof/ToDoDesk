@@ -863,6 +863,14 @@ export default function BoardView({ boardProjectId = null }: BoardViewProps): JS
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable === true
+      if (typing) return
+
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault()
         setSpacePressed(true)
