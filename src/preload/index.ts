@@ -42,6 +42,8 @@ const api: ToDoDeskApi = {
   openUpdateUrl: (url) => ipcRenderer.invoke('updates:open', url),
   cloudLogin: (serverUrl, login, password) =>
     ipcRenderer.invoke('cloud:login', serverUrl, login, password),
+  cloudRegister: (serverUrl, login, password, displayName) =>
+    ipcRenderer.invoke('cloud:register', serverUrl, login, password, displayName),
   cloudLogout: () => ipcRenderer.invoke('cloud:logout'),
   cloudStatus: () => ipcRenderer.invoke('cloud:status'),
   cloudPullNow: () => ipcRenderer.invoke('cloud:pull'),

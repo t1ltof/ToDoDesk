@@ -42,6 +42,7 @@ export default function SettingsDialog({
   const [cloudStatus, setCloudStatus] = useState<CloudSessionInfo | null>(null)
   const [cloudLogin, setCloudLogin] = useState('')
   const [cloudPassword, setCloudPassword] = useState('')
+  const [cloudDisplayName, setCloudDisplayName] = useState('')
   const [cloudBusy, setCloudBusy] = useState(false)
   const [cloudMessage, setCloudMessage] = useState<string | null>(null)
   const [inviteToken, setInviteToken] = useState('')
@@ -62,6 +63,37 @@ export default function SettingsDialog({
       ...current,
       settings: { ...current.settings, ...patch }
     })
+  }
+
+  const finishCloudAuth = async (
+    result: Awaited<ReturnType<typeof window.tododesk.cloudLogin>>
+  ): Promise<void> => {
+    if (!result.ok) {
+      setCloudMessage(result.error ?? 'Ошибка')
+      setCloudBusy(false)
+      return
+    }
+    const serverUrl = settings.cloudServerUrl ?? DEFAULT_CLOUD_SERVER_URL
+    const pulled = await window.tododesk.cloudPullNow()
+    const cloudSettings = {
+      profileMode: 'cloud' as const,
+      cloudServerUrl: serverUrl,
+      cloudUserId: result.user?.id ?? null
+    }
+    if (pulled.data) {
+      await persist({
+        ...pulled.data,
+        settings: { ...pulled.data.settings, ...cloudSettings }
+      })
+    } else {
+      await update(cloudSettings)
+    }
+    setCloudPassword('')
+    setCloudStatus(await window.tododesk.cloudStatus())
+    setCloudMessage(
+      pulled.data ? 'Данные загружены с сервера' : 'Облако подключено, локальные данные отправлены'
+    )
+    setCloudBusy(false)
   }
 
   const updateSmartRules = async (
@@ -422,6 +454,13 @@ export default function SettingsDialog({
                 <>
                   <input
                     type="text"
+                    value={cloudDisplayName}
+                    onChange={(e) => setCloudDisplayName(e.target.value)}
+                    placeholder="Имя (для регистрации)"
+                    className="mb-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
                     value={cloudLogin}
                     onChange={(e) => setCloudLogin(e.target.value)}
                     placeholder="Логин"
@@ -434,46 +473,45 @@ export default function SettingsDialog({
                     placeholder="Пароль"
                     className="mb-2 w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm"
                   />
-                  <button
-                    type="button"
-                    disabled={cloudBusy || !cloudLogin || !cloudPassword}
-                    onClick={async () => {
-                      setCloudBusy(true)
-                      setCloudMessage(null)
-                      const serverUrl = settings.cloudServerUrl ?? DEFAULT_CLOUD_SERVER_URL
-                      const result = await window.tododesk.cloudLogin(serverUrl, cloudLogin, cloudPassword)
-                      if (!result.ok) {
-                        setCloudMessage(result.error ?? 'Ошибка входа')
-                        setCloudBusy(false)
-                        return
-                      }
-                      const pulled = await window.tododesk.cloudPullNow()
-                      const cloudSettings = {
-                        profileMode: 'cloud' as const,
-                        cloudServerUrl: serverUrl,
-                        cloudUserId: result.user?.id ?? null
-                      }
-                      if (pulled.data) {
-                        await persist({
-                          ...pulled.data,
-                          settings: { ...pulled.data.settings, ...cloudSettings }
-                        })
-                      } else {
-                        await update(cloudSettings)
-                      }
-                      setCloudPassword('')
-                      setCloudStatus(await window.tododesk.cloudStatus())
-                      setCloudMessage(
-                        pulled.data
-                          ? 'Данные загружены с сервера'
-                          : 'Облако подключено, локальные данные отправлены'
-                      )
-                      setCloudBusy(false)
-                    }}
-                    className="w-full rounded-lg bg-accent px-3 py-2 text-sm text-white disabled:opacity-50"
-                  >
-                    {cloudBusy ? 'Вход…' : 'Войти'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={cloudBusy || !cloudLogin || !cloudPassword}
+                      onClick={async () => {
+                        setCloudBusy(true)
+                        setCloudMessage(null)
+                        const serverUrl = settings.cloudServerUrl ?? DEFAULT_CLOUD_SERVER_URL
+                        const result = await window.tododesk.cloudLogin(
+                          serverUrl,
+                          cloudLogin,
+                          cloudPassword
+                        )
+                        await finishCloudAuth(result)
+                      }}
+                      className="flex-1 rounded-lg bg-accent px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {cloudBusy ? '…' : 'Войти'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cloudBusy || !cloudLogin || !cloudPassword}
+                      onClick={async () => {
+                        setCloudBusy(true)
+                        setCloudMessage(null)
+                        const serverUrl = settings.cloudServerUrl ?? DEFAULT_CLOUD_SERVER_URL
+                        const result = await window.tododesk.cloudRegister(
+                          serverUrl,
+                          cloudLogin,
+                          cloudPassword,
+                          cloudDisplayName
+                        )
+                        await finishCloudAuth(result)
+                      }}
+                      className="flex-1 rounded-lg border border-surface-border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      Регистрация
+                    </button>
+                  </div>
                 </>
               )}
               {cloudMessage && <p className="mt-2 text-xs text-gray-500">{cloudMessage}</p>}

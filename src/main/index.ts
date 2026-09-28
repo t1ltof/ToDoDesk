@@ -58,6 +58,7 @@ import {
 import {
   acceptInviteAndMerge,
   cloudLogin,
+  cloudRegister,
   cloudLogout,
   cloudPull,
   cloudOverwrite,
@@ -336,6 +337,18 @@ if (!gotLock) {
       }
     )
 
+    ipcMain.handle(
+      'cloud:register',
+      async (_, serverUrl: string, login: string, password: string, displayName: string) => {
+        const result = await cloudRegister(serverUrl, login, password, displayName)
+        if (result.ok) {
+          startCloudWatch((updated) => {
+            deliverCloudUpdate(updated)
+          })
+        }
+        return result
+      }
+    )
     ipcMain.handle('cloud:login', async (_, serverUrl: string, login: string, password: string) => {
       const result = await cloudLogin(serverUrl, login, password)
       if (result.ok) {
