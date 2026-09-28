@@ -12,7 +12,7 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: required('JWT_SECRET'),
   publicUrl: process.env.PUBLIC_URL?.trim() || 'http://127.0.0.1:8790',
-  allowSignup: process.env.ALLOW_SIGNUP === 'true',
+  allowSignup: process.env.ALLOW_SIGNUP !== 'false',
   accessTtl: '15m',
   refreshDays: 30
 }

@@ -1,5 +1,6 @@
 import argon2 from 'argon2'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
+import { config } from './config.js'
 import { query } from './db.js'
 import { hitRateLimit } from './rateLimit.js'
 import {
@@ -55,6 +56,51 @@ function publicUser(user: UserRow): { id: string; login: string; displayName: st
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/health', async () => ({ ok: true }))
+
+  app.post('/auth/register', async (request, reply) => {
+    if (!config.allowSignup) {
+      return reply.code(403).send({ error: 'Регистрация отключена' })
+    }
+    const ip = request.ip || 'unknown'
+    if (hitRateLimit(`register:${ip}`, 5, 60 * 60_000)) {
+      return reply.code(429).send({ error: 'Слишком много регистраций. Попробуйте позже' })
+    }
+
+    const body = request.body as { login?: string; password?: string; displayName?: string }
+    const login = body.login?.trim().toLowerCase() ?? ''
+    const password = body.password ?? ''
+    const displayName = body.displayName?.trim() || login
+    if (!/^[a-z0-9._-]{3,32}$/.test(login)) {
+      return reply.code(400).send({ error: 'Логин: 3–32 символа, латиница, цифры, . _ -' })
+    }
+    if (password.length < 6) {
+      return reply.code(400).send({ error: 'Пароль не короче 6 символов' })
+    }
+
+    const existing = await query('SELECT id FROM users WHERE login = $1', [login])
+    if (existing.rows[0]) {
+      return reply.code(409).send({ error: 'Такой логин уже занят' })
+    }
+
+    const userId = newId()
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id })
+    await query(
+      'INSERT INTO users (id, login, password_hash, display_name) VALUES ($1, $2, $3, $4)',
+      [userId, login, passwordHash, displayName.slice(0, 80)]
+    )
+    const refresh = createRefreshToken()
+    await query('INSERT INTO sessions (id, user_id, refresh_hash, expires_at) VALUES ($1, $2, $3, $4)', [
+      newId(),
+      userId,
+      refresh.hash,
+      refresh.expiresAt.toISOString()
+    ])
+    return {
+      accessToken: await signAccessToken(userId, login),
+      refreshToken: refresh.token,
+      user: { id: userId, login, displayName: displayName.slice(0, 80) }
+    }
+  })
 
   app.post('/auth/login', async (request, reply) => {
     const ip = request.ip || 'unknown'

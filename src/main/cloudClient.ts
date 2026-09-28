@@ -71,6 +71,32 @@ async function refreshSession(session: CloudSession): Promise<CloudSession | nul
   return next
 }
 
+async function storeAuthResponse(
+  base: string,
+  response: Response,
+  fallbackError: string
+): Promise<CloudLoginResult> {
+  const body = (await response.json()) as {
+    error?: string
+    accessToken?: string
+    refreshToken?: string
+    user?: CloudUser
+  }
+  if (!response.ok || !body.accessToken || !body.refreshToken || !body.user) {
+    return { ok: false, error: body.error ?? fallbackError }
+  }
+  writeCloudSession({
+    serverUrl: base,
+    accessToken: body.accessToken,
+    refreshToken: body.refreshToken,
+    userId: body.user.id,
+    login: body.user.login,
+    displayName: body.user.displayName,
+    revision: 0
+  })
+  return { ok: true, user: body.user }
+}
+
 export async function cloudLogin(
   serverUrl: string,
   login: string,
@@ -83,25 +109,26 @@ export async function cloudLogin(
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ login, password })
     })
-    const body = (await response.json()) as {
-      error?: string
-      accessToken?: string
-      refreshToken?: string
-      user?: CloudUser
-    }
-    if (!response.ok || !body.accessToken || !body.refreshToken || !body.user) {
-      return { ok: false, error: body.error ?? 'Не удалось войти' }
-    }
-    writeCloudSession({
-      serverUrl: base,
-      accessToken: body.accessToken,
-      refreshToken: body.refreshToken,
-      userId: body.user.id,
-      login: body.user.login,
-      displayName: body.user.displayName,
-      revision: 0
+    return await storeAuthResponse(base, response, 'Не удалось войти')
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Ошибка сети' }
+  }
+}
+
+export async function cloudRegister(
+  serverUrl: string,
+  login: string,
+  password: string,
+  displayName: string
+): Promise<CloudLoginResult> {
+  const base = normalizeUrl(serverUrl)
+  try {
+    const response = await fetch(`${base}/auth/register`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password, displayName })
     })
-    return { ok: true, user: body.user }
+    return await storeAuthResponse(base, response, 'Не удалось зарегистрироваться')
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Ошибка сети' }
   }

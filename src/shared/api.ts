@@ -117,6 +117,12 @@ export interface ToDoDeskApi {
   checkUpdates: () => Promise<UpdateInfo>
   openUpdateUrl: (url: string) => Promise<void>
   cloudLogin: (serverUrl: string, login: string, password: string) => Promise<CloudLoginResult>
+  cloudRegister: (
+    serverUrl: string,
+    login: string,
+    password: string,
+    displayName: string
+  ) => Promise<CloudLoginResult>
   cloudLogout: () => Promise<void>
   cloudStatus: () => Promise<CloudSessionInfo>
   cloudPullNow: () => Promise<CloudSyncResult>
