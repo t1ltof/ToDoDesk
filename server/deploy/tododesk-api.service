@@ -4,12 +4,20 @@ After=network.target docker.service
 
 [Service]
 Type=simple
+User=tododesk
+Group=tododesk
 WorkingDirectory=/opt/tododesk/api
 EnvironmentFile=/opt/tododesk/.env
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+# Only path the process writes: attachment files (UPLOAD_DIR). Must exist before start.
+# If UPLOAD_DIR is overridden, add that directory here too.
+ReadWritePaths=/opt/tododesk/uploads
 
 [Install]
 WantedBy=multi-user.target

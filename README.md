@@ -140,6 +140,10 @@ DATABASE_URL=... JWT_SECRET=... npm run create-user -- alice 'password'
 HOST=127.0.0.1 PORT=8790 npm start
 ```
 
+Systemd и nginx: `server/deploy/`. Сервис работает от пользователя `tododesk`, не от root. Перед первым запуском обновлённого юнита — шаги в [server/deploy/README.md](server/deploy/README.md).
+
+Лимит входа считает клиентов по `X-Forwarded-For` от доверенного прокси (`TRUST_PROXY`, по умолчанию `127.0.0.1`).
+
 Клиент: Настройки → Облако → URL сервера, логин, пароль. Локальный профиль остаётся на диске.
 
 ## Стек
