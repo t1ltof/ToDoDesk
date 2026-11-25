@@ -1,4 +1,4 @@
-import Fastify from 'fastify'
+import { createApp } from './app.js'
 import { config } from './config.js'
 import { closeDb, migrate } from './db.js'
 import { registerAttachmentRoutes } from './attachments.js'
@@ -6,7 +6,7 @@ import { registerBoardLive } from './boardLive.js'
 import { registerProjectRoutes } from './projects.js'
 import { registerRoutes } from './routes.js'
 
-const app = Fastify({ logger: true })
+const app = createApp()
 
 await migrate()
 await registerRoutes(app)

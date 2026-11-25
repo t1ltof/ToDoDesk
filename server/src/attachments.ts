@@ -20,8 +20,27 @@ function bearer(request: FastifyRequest): string | null {
 async function requireUserId(request: FastifyRequest): Promise<string> {
   const token = bearer(request)
   if (!token) throw Object.assign(new Error('Unauthorized'), { statusCode: 401 })
-  const payload = await verifyAccessToken(token)
-  return payload.sub
+  try {
+    const payload = await verifyAccessToken(token)
+    return payload.sub
+  } catch {
+    throw Object.assign(new Error('Unauthorized'), { statusCode: 401 })
+  }
+}
+
+function uploadFileName(header: string | string[] | undefined): string {
+  const raw = Array.isArray(header) ? header[0] : header
+  const value = raw && raw.length > 0 ? raw : 'file'
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(value)
+  } catch (error) {
+    if (error instanceof URIError) {
+      throw Object.assign(new Error('Bad file name'), { statusCode: 400 })
+    }
+    throw error
+  }
+  return decoded.replace(/[<>:"/\\|?*]/g, '_').slice(0, 180) || 'file'
 }
 
 async function roleOf(projectId: string, userId: string): Promise<string | null> {
@@ -49,12 +68,13 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
     try {
       const userId = await requireUserId(request)
       const { id: projectId } = request.params as { id: string }
-      const role = await roleOf(projectId, userId)
-      if (!canWrite(role)) return reply.code(403).send({ error: 'Недостаточно прав' })
-
       const body = request.body
       if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'Ожидается файл' })
       if (body.length > MAX_FILE) return reply.code(413).send({ error: 'Файл больше 5 МБ' })
+      const fileName = uploadFileName(request.headers['x-file-name'])
+
+      const role = await roleOf(projectId, userId)
+      if (!canWrite(role)) return reply.code(403).send({ error: 'Недостаточно прав' })
 
       const used = await query<{ total: string }>(
         'SELECT COALESCE(SUM(size), 0)::text AS total FROM project_attachments WHERE project_id = $1',
@@ -66,8 +86,6 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
       }
 
       const attachmentId = newId()
-      const rawName = decodeURIComponent(String(request.headers['x-file-name'] ?? 'file'))
-      const fileName = rawName.replace(/[<>:"/\\|?*]/g, '_').slice(0, 180) || 'file'
       const dir = join(uploadRoot(), projectId)
       mkdirSync(dir, { recursive: true })
       writeFileSync(join(dir, attachmentId), body)
@@ -85,6 +103,7 @@ export async function registerAttachmentRoutes(app: FastifyInstance): Promise<vo
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode
       if (status === 401) return reply.code(401).send({ error: 'Unauthorized' })
+      if (status === 400) return reply.code(400).send({ error: 'Некорректное имя файла' })
       throw error
     }
   })

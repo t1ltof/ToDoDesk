@@ -13,6 +13,8 @@ export const config = {
   jwtSecret: required('JWT_SECRET'),
   publicUrl: process.env.PUBLIC_URL?.trim() || 'http://127.0.0.1:8790',
   allowSignup: process.env.ALLOW_SIGNUP !== 'false',
+  // Peer address allowed to supply X-Forwarded-For (nginx on this host).
+  trustProxy: process.env.TRUST_PROXY?.trim() || '127.0.0.1',
   accessTtl: '15m',
   refreshDays: 30
 }
